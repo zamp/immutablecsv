@@ -45,8 +45,10 @@ namespace ImmutableData
 
 		public override bool CanConvert(Type objectType)
 		{
+#pragma warning disable CS0618 // Type or member is obsolete
 			if (typeof(AssetRef).IsAssignableFrom(objectType))
 				throw new Exception($"Trying to serialize reference type {nameof(AssetRef)}. This is not supported.");
+#pragma warning restore CS0618 // Type or member is obsolete
 			
 			return typeof(Immutable).IsAssignableFrom(objectType);
 		}

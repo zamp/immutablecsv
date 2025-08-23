@@ -20,6 +20,7 @@ namespace ImmutableData
     public static class ImmutableImporter
     {
         public static IDeserializerProvider DeserializerProvider = new BasicDeserializerProvider();
+        public static IAssemblyProvider AssemblyProvider = new BasicAssemblyProvider();
         
         public const char ArrayStart = '[';
         public const char ArrayEnd = ']';
@@ -63,7 +64,7 @@ namespace ImmutableData
             public PropertyInfo PropertyInfo;
         }
 
-        public static List<string> Breadcrumbs = new();
+        public static readonly List<string> Breadcrumbs = new();
 
         public static ImmutableDatabase Import(string[] files)
         {
@@ -315,11 +316,11 @@ namespace ImmutableData
                 throw new InvalidDataException($"CSV does not contain class header.");
             }
 
+            var types = GetTypes();
+
             // read data
             while (ReadRow(isKeyValuePairs, reader, row, headers))
             {
-                var types = Assembly.GetAssembly(typeof(Immutable)).GetTypes();
-
                 // read class out first so we know what class to create
                 var type = types.FirstOrDefault(x => x.Name == row[headers[ClassHeader]]);
 
@@ -380,6 +381,17 @@ namespace ImmutableData
                 if (isKeyValuePairs)
                     break;
             }
+        }
+
+        public static List<Type> GetTypes()
+        {
+            var types = new List<Type>();
+            foreach (var assembly in AssemblyProvider.Assemblies)
+            {
+                types.AddRange(assembly.GetTypes());
+            }
+            types = types.Distinct().ToList();
+            return types;
         }
 
         private static bool ReadRow(bool isKeyValuePairs, CsvFileReader reader, List<string> row,

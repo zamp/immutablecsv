@@ -4,6 +4,7 @@ using Object = UnityEngine.Object;
 namespace ImmutableData
 {
 	[Serializable]
+	[Obsolete("Do not use directly in Immutables! Use generic AssetRef<T> instead!")]
 	public abstract class AssetRef
 	{
 		/// <summary>
@@ -18,7 +19,9 @@ namespace ImmutableData
 	}
 	
 	[Serializable]
+#pragma warning disable CS0618 // Type or member is obsolete
 	public class AssetRef<T> : AssetRef where T : Object
+#pragma warning restore CS0618 // Type or member is obsolete
 	{
 		/// <summary>
 		/// Gets the type
