@@ -2,7 +2,7 @@ using System;
 
 namespace ImmutableData
 {
-	[AttributeUsage(AttributeTargets.Property)]
+	[AttributeUsage(AttributeTargets.Property|AttributeTargets.Field)]
 	public sealed class OrderAttribute : Attribute
 	{
 		public int Order { get; }

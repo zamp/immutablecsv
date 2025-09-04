@@ -44,8 +44,14 @@ namespace ImmutableData.Deserializers
             var orderedProperties = classType.GetProperties()
                 .Where(x => Attribute.IsDefined(x, typeof(OrderAttribute)))
                 .ToDictionary(x => x.GetCustomAttributes().OfType<OrderAttribute>().First().Order, x => x);
+            
+            var orderedFields = classType.GetFields(BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic)
+	            .Where(x => Attribute.IsDefined(x, typeof(OrderAttribute)))
+	            .ToDictionary(x => x.GetCustomAttributes().OfType<OrderAttribute>().First().Order, x => x);
 
-            if (orderedProperties.Count == 0)
+            var hasProperties = orderedProperties.Count != 0;
+            var hasFields = orderedFields.Count != 0; 
+            if (!hasProperties && !hasFields)
             {
                 deserializedObject = Activator.CreateInstance(classType);
                 return true;
@@ -84,7 +90,10 @@ namespace ImmutableData.Deserializers
 
             deserializedObject = Activator.CreateInstance(classType);
 
-            SetOrderedProperties(type, ref deserializedObject, orderedProperties, splitData);
+            if (hasProperties)
+	            SetOrderedProperties(type, ref deserializedObject, orderedProperties, splitData);
+            else 
+	            SetOrderedFields(type, ref deserializedObject, orderedFields, splitData);
 
             return true;
         }
@@ -132,6 +141,48 @@ namespace ImmutableData.Deserializers
                 else if (ImmutableImporter.TryDeserialize(nullableType, propertyData, out var nullableObj))
                 {
                     orderedProperty.Value.SetValue(value, nullableObj);
+                }
+
+                j++;
+            }
+        }
+        
+        private static void SetOrderedFields(Type type, ref object value, Dictionary<int, FieldInfo> orderedFields, List<string> splitData)
+        {
+            if (splitData.Count == 0)
+                return;
+            
+            var j = 0;
+            var skippedNullable = false;
+
+            foreach (var orderedField in orderedFields)
+            {
+                var nullableType = Nullable.GetUnderlyingType(orderedField.Value.FieldType);
+                var propertyType = nullableType ?? orderedField.Value.FieldType;
+                
+                if (j >= splitData.Count)
+                {
+                    if (skippedNullable && nullableType == null)
+                        throw new InvalidDataException($"Non nullable property defined after nullable property in '{type.Name}'. Nullable properties have to be ordered after non nullable properties.");
+                    
+                    skippedNullable = true;
+                    continue;
+                }
+                
+                var propertyData = splitData[j];
+
+                if (nullableType == null)
+                {
+                    if (ImmutableImporter.TryDeserialize(propertyType, propertyData, out var obj))
+                    {
+	                    orderedField.Value.SetValue(value, obj);
+                    }
+                    else
+                        throw new InvalidDataException($"Could not deserialize value '{propertyData}' for property {propertyType}.");
+                }
+                else if (ImmutableImporter.TryDeserialize(nullableType, propertyData, out var nullableObj))
+                {
+                    orderedField.Value.SetValue(value, nullableObj);
                 }
 
                 j++;
