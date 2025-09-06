@@ -264,7 +264,7 @@ namespace ImmutableData
                 return true;
             }
 
-            var deserializer = Enumerable.FirstOrDefault(DeserializerProvider.Deserializers, x => x.CanDeserialize(type));
+            var deserializer = DeserializerProvider.Deserializers.FirstOrDefault(x => x.CanDeserialize(type));
 
             if (deserializer == null)
             {
