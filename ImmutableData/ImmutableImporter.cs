@@ -69,7 +69,22 @@ namespace ImmutableData
         public static ImmutableDatabase Import(string[] files)
         {
             files = files.Distinct().ToArray();
-            return ResolveModels(GetUnresolvedModelsFromFiles(files.Distinct()).ToList());
+            try
+            {
+	            return ResolveModels(GetUnresolvedModelsFromFiles(files.Distinct()).ToList());
+            }
+            catch (Exception e)
+            {
+	            var error = new StringBuilder();
+	            error.AppendLine("Last 10 breadcrumbs:");
+	            var count = Math.Min(10, Breadcrumbs.Count);
+	            for (var i = Breadcrumbs.Count - count; i < Breadcrumbs.Count; ++i)
+	            {
+		            error.AppendLine(Breadcrumbs[i]);
+	            }
+	            
+	            throw new Exception(error.ToString(), e);
+            }
         }
 
         private static ImmutableDatabase ResolveModels(List<UnresolvedModel> unresolvedModels)
@@ -284,10 +299,11 @@ namespace ImmutableData
             // get all unresolved models from files
             foreach (var file in files)
             {
-                foreach (var unresolved in GetUnresolvedModelsFromFile(file))
-                {
-                    yield return unresolved;
-                }
+	            Breadcrumbs.Add($"Importing file {file}");
+	            foreach (var unresolved in GetUnresolvedModelsFromFile(file))
+	            {
+		            yield return unresolved;
+	            }
             }
         }
 
@@ -541,7 +557,7 @@ namespace ImmutableData
                 }
                 catch (Exception e)
                 {
-                    throw new Exception($"Malformed data {split[i]}", e);
+                    throw new Exception($"Malformed split data {split[i]}", e);
                 }
             }
 

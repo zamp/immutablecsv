@@ -5,6 +5,10 @@ namespace ImmutableData.Utilities
 {
 	public static class UnitUtility
 	{
+		// NOTICE! If you add more make them lowercase!
+		// NOTICE! If you add more make them lowercase!
+		// NOTICE! If you add more make them lowercase!
+		
 		private static readonly Dictionary<string, double> Special = new()
 		{
 			{"%", 0.01},
@@ -15,13 +19,13 @@ namespace ImmutableData.Utilities
 			{"g", 0.001}, // gram
 			{"kg", 1},    // kilogram
 			{"t", 1e3},   // tonne
-			{"Mt", 1e6},  // megatonne
-			{"Gt", 1e9},  // gigatonne
-			{"Tg", 1e12}, // teratonne
-			{"Pg", 1e15}, // petatonne
-			{"Eg", 1e18}, // exatonne
-			{"Zg", 1e21}, // zettatonne
-			{"Yg", 1e24}, // yottatonne
+			{"mt", 1e6},  // megatonne
+			{"gt", 1e9},  // gigatonne
+			{"tg", 1e12}, // teratonne
+			{"pg", 1e15}, // petatonne
+			{"eg", 1e18}, // exatonne
+			{"zg", 1e21}, // zettatonne
+			{"yg", 1e24}, // yottatonne
 		};
 		
 		private static readonly Dictionary<string, double> Distance = new()
