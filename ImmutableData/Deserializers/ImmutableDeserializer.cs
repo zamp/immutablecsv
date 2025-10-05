@@ -13,12 +13,11 @@ namespace ImmutableData.Deserializers
 
         public bool Deserialize(Type type, string data, out object deserializedObject)
         {
-            var model = ImmutableDatabase.Get(type, data);
-            if (model != null)
-            {
-                deserializedObject = model;
-                return true;
-            }
+	        if (ImmutableDatabase.Exists(type, data))
+	        {
+		        deserializedObject = ImmutableDatabase.Get(type, data);
+		        return true;
+	        }
 
             ImmutableImporter.Breadcrumbs.Add("Failed to deserialize " + type.Name + " with data " + data);
             deserializedObject = null;

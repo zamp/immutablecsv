@@ -11,34 +11,22 @@ namespace ImmutableData
         /// <summary>
         /// Add a single model to the database
         /// </summary>
-        /// <param name="model"></param>
+        /// <param name="immutable"></param>
         /// <typeparam name="T"></typeparam>
         /// <exception cref="Exception"></exception>
-        internal void Add<T>(T model) where T : Immutable
+        internal void Add<T>(T immutable) where T : Immutable
         {
-            Add(model.GetType(), model);
+            Add(immutable.GetType(), immutable);
         }
 
         private void Add(Type type, Immutable immutable)
         {
             if (!_database.TryAdd(immutable.Name, immutable))
-                throw new Exception($"Model with name {immutable.Name} already exists.");
-        }
-        
-        /// <summary>
-        /// Add a range of models
-        /// </summary>
-        /// <param name="models"></param>
-        internal void AddRange(List<Immutable> models)
-        {
-            foreach (var model in models)
-            {
-                Add(model);
-            }
+                throw new Exception($"Immutable with name {immutable.Name} already exists.");
         }
 
         /// <summary>
-        /// Gets a model based on the name
+        /// Gets immutable based on the name
         /// </summary>
         /// <param name="name"></param>
         /// <typeparam name="T"></typeparam>
@@ -49,7 +37,7 @@ namespace ImmutableData
         }
         
         /// <summary>
-        /// Gets model based on name
+        /// Gets immutable based on name
         /// </summary>
         /// <param name="type"></param>
         /// <param name="name"></param>
@@ -60,11 +48,41 @@ namespace ImmutableData
             {
                 throw new Exception($"Name is null or empty for type {type.Name}");
             }
-            return _database.GetValueOrDefault(name);
+
+            if (_database.TryGetValue(name, out var immutable))
+	            return immutable;
+            throw new Exception($"No immutable with name {name} of type {type.Name} exists.");
         }
         
         /// <summary>
-        /// Gets models of type
+        /// Checks if immutable exists
+        /// </summary>
+        /// <param name="name"></param>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public bool Exists<T>(string name) where T : Immutable
+        {
+	        return Exists(typeof(T), name);
+        }
+        
+        /// <summary>
+        /// Checks if immutable exists
+        /// </summary>
+        /// <param name="type"></param>
+        /// <param name="name"></param>
+        /// <returns></returns>
+        public bool Exists(Type type, string name)
+        {
+	        if (string.IsNullOrEmpty(name))
+	        {
+		        throw new Exception($"Name is null or empty for type {type.Name}");
+	        }
+
+	        return _database.ContainsKey(name);
+        }
+        
+        /// <summary>
+        /// Gets immutables of type
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
