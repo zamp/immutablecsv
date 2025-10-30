@@ -160,14 +160,14 @@ namespace ImmutableData
 		{
 			foreach (var a in unresolvedModels)
 			{
-				var aName = a.Unresolved.First(x => x.Name == "Name").Value;
+				var aName = a.Unresolved.FirstOrDefault(x => x.Name == "Name")?.Value ?? "";
 				foreach (var b in unresolvedModels)
 				{
 					if (ReferenceEquals(a, b))
 						continue;
 
-					var bName = b.Unresolved.First(x => x.Name == "Name").Value;
-					if (aName == bName)
+					var bName = b.Unresolved.FirstOrDefault(x => x.Name == "Name")?.Value ?? "";
+					if (a.Immutable.GetType() == b.Immutable.GetType() && aName == bName)
 						throw new Exception($"Name conflict! {aName}=={bName} ({a.SourceFile}, {b.SourceFile}");
 				}
 			}
@@ -187,11 +187,7 @@ namespace ImmutableData
 					toResolve.Unresolved.Remove(property);
 			}
 
-			if (string.IsNullOrEmpty(toResolve.Immutable.Name))
-				throw new Exception($"Unable to resolve name.");
-
-			// add to database if it doesn't exist yet
-			if (!db.Exists(toResolve.Immutable.Name))
+			if (!db.Exists(toResolve.Immutable.GetType(), toResolve.Immutable.Name))
 				db.Add(toResolve.Immutable);
 		}
 

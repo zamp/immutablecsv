@@ -7,6 +7,13 @@ namespace ImmutableData
     public class ImmutableDatabase
     {
         private readonly Dictionary<string, Immutable> _database = new();
+        
+        private string GetIdentifier(Type type, string name)
+        {
+	        if (type == null)
+		        throw new ArgumentNullException($"Type is null");
+	        return $"{type.Name}{name}";
+        }
 
         /// <summary>
         /// Add a single model to the database
@@ -21,8 +28,8 @@ namespace ImmutableData
 
         private void Add(Type type, Immutable immutable)
         {
-            if (!_database.TryAdd(immutable.Name, immutable))
-                throw new Exception($"Immutable with name {immutable.Name} already exists.");
+	        if (!_database.TryAdd(GetIdentifier(type, immutable.Name), immutable))
+		        throw new Exception($"Immutable with name {immutable.Name} already exists.");
         }
 
         /// <summary>
@@ -31,7 +38,7 @@ namespace ImmutableData
         /// <param name="name"></param>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public T Get<T>(string name) where T : Immutable
+        public T Get<T>(string name = "") where T : Immutable
         {
             return (T)Get(typeof(T), name);
         }
@@ -44,12 +51,7 @@ namespace ImmutableData
         /// <returns></returns>
         public Immutable Get(Type type, string name)
         {
-            if (string.IsNullOrEmpty(name))
-            {
-                throw new Exception($"Name is null or empty for type {type.Name}");
-            }
-
-            if (_database.TryGetValue(name, out var immutable))
+            if (_database.TryGetValue(GetIdentifier(type,name), out var immutable))
 	            return immutable;
             throw new Exception($"No immutable with name {name} of type {type.Name} exists.");
         }
@@ -73,12 +75,7 @@ namespace ImmutableData
         /// <returns></returns>
         public bool Exists(Type type, string name)
         {
-	        if (string.IsNullOrEmpty(name))
-	        {
-		        throw new Exception($"Name is null or empty for type {type.Name}");
-	        }
-
-	        return _database.ContainsKey(name);
+	        return _database.ContainsKey(GetIdentifier(type, name));
         }
         
         /// <summary>
@@ -89,11 +86,6 @@ namespace ImmutableData
         public IEnumerable<T> GetAll<T>() where T : Immutable
         {
             return _database.Values.Where(x => x is T).Cast<T>();
-        }
-
-        public bool Exists(string name)
-        {
-            return _database.ContainsKey(name);
         }
 
         public bool Validate(Result result)
