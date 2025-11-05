@@ -19,18 +19,18 @@ namespace ImmutableData.Utilities
 		
 		private static readonly Dictionary<string, double> Mass = new()
 		{
-			{"g", 0.001},   // gram
-			{"kg", 1},      // kilogram
-			{"t", 1e3},     // tonne (megagram)
-			{"kt", 1e6},    // kilotonne
-			{"mt", 1e9},    // megatonne
-			{"gt", 1e12},   // gigatonne
-			{"tt", 1e15},   // teratonne
-			{"tg", 1e9},    // teragram
-			{"pg", 1e12},   // petagram
-			{"eg", 1e15},   // exagram
-			{"zg", 1e18},   // zettagram
-			{"yg", 1e21},   // yottagram
+			{"g", 0.001},      // gram
+			{"kg", 1},         // kilogram
+			{"t", 1e3},        // tonne
+			{"kt", 1e6},       // kilotonne
+			{"Mt", 1e9},       // megatonne
+			{"Gt", 1e12},      // gigatonne
+			{"Tt", 1e15},      // teratonne
+			{"Tg", 1e12},      // teragram
+			{"Pg", 1e15},      // petagram
+			{"Eg", 1e18},      // exagram
+			{"Zg", 1e21},      // zettagram
+			{"Yg", 1e24},      // yottagram
 		};
 		
 		private static readonly Dictionary<string, double> Distance = new()
@@ -39,26 +39,27 @@ namespace ImmutableData.Utilities
 			{"cm", 0.01},			 // centimeter
 			{"m", 1},			     // meter
 			{"km", 1000},			 // kilometer
-			{"ls", 299792458},		 // light seconds
-			{"ly", 9460730472580800} // light years
+			{"Ls", 299792458},		 // light seconds
+			{"Ly", 9460730472580800} // light years
 		};
 		
-		private static readonly Dictionary<string, double> Temperature = new()
+		private static readonly Dictionary<string, Func<double, double>> Temperature = new()
 		{
-			{"°c", 273.15},			 // celsius, applied as offset
+			{"°C", c => c + 273.15},				// celsius to kelvin
+			{"°F", f => (f - 32) * 5/9 + 273.15},	// fahrenheit to kelvin
+			{"°K", k => k},							// kelvin (already in kelvin)
 		};
 
 		public static double Convert(string unit, double value)
 		{
-			unit = unit.ToLowerInvariant();
 			if (Special.TryGetValue(unit, out var multiplier))
 				return value * multiplier;
 			if (Mass.TryGetValue(unit, out multiplier))
 				return value * multiplier;
 			if (Distance.TryGetValue(unit, out multiplier))
 				return value * multiplier;
-			if (Temperature.TryGetValue(unit, out var offset))
-				return value + offset;
+			if (Temperature.TryGetValue(unit, out var conversion))
+				return conversion(value);
 			return value;
 		}
 		

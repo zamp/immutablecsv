@@ -371,6 +371,11 @@ namespace ImmutableData
 				throw new InvalidDataException($"{path} {row[headers[ClassHeader]]} not found in assembly.");
 			}
 
+			if (!typeof(Immutable).IsAssignableFrom(type))
+			{
+				throw new InvalidDataException($"{path} {type} is not {nameof(Immutable)}.");
+			}
+
 			var immutable = (Immutable)Activator.CreateInstance(type);
 
 			var unresolvedModel = new UnresolvedModel

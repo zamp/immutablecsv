@@ -1,13 +1,40 @@
 # immutablecsv Plugin Documentation
 
 ## 1. Purpose & High‑Level Overview
-`immutablecsv` is a lightweight, reflection‑driven data import system for Unity that turns a set of CSV definition files (shipped in `StreamingAssets`) into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
+`immutablecsv` is a lightweight, reflection‑driven data import system for Unity (will probably work outside of Unity too) that turns a set of CSV definition files (shipped in `StreamingAssets`) into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
 
 It is designed for:
 - Rapid iteration on game balance / content using spreadsheets.
 - Deterministic, read‑only data objects ("immutables") referenced anywhere in gameplay code.
 - Zero manual wiring: types are auto‑discovered via assemblies + reflection.
 - Cross‑referencing between immutable objects by `Name`.
+
+### Usage:
+CSV:
+```
+Class,Name,Value
+SomeData,SomeDataInCsv,1234
+```
+
+C#:
+```csharp
+// Import csv
+var files = Directory.GetFiles("PATH_WITH_CSV_FILES", "*.csv");
+var db = ImmutableImporter.Import(files);
+
+// Retrieve specific immutable
+var someData = db.Get<SomeData>("SomeDataInCsv");
+
+// Iterate all immutables of type
+foreach (var moreData in db.GetAll<SomeData>())
+{
+    // Use moreData here
+    if (moreData.Value > 0)
+    {
+        // Not zero
+    }
+}
+```
 
 ## 2. Core Concepts
 | Concept | Summary |
@@ -17,11 +44,9 @@ It is designed for:
 | `ImmutableImporter` | Orchestrates reading CSV files, constructing objects, deferred resolution of references, list parsing, and validation. |
 | `IDeserializerProvider` / Deserializers | Pluggable chain of strategies that convert string cells to typed values. Order matters. |
 | `IAssemblyProvider` | Supplies the assemblies that will be scanned for `Immutable` subclasses. Basic provider uses the assembly that contains `Immutable`. |
-| Breadcrumbs | A rolling trace list used for debugging failed imports. Last 10 are surfaced in exceptions. |
-| Unresolved Model Queue | Circular / forward references are handled by iteratively attempting to resolve outstanding fields until stable or a safety iteration cap is reached. |
 
 ## 3. Import Lifecycle
-1. Collect CSV file paths (example: `GameManager` calls `Directory.GetFiles(Globals.ModelsPath, "*.csv")`).
+1. Collect CSV file paths (example: call `var files = Directory.GetFiles("MY_CSV_PATH", "*.csv")`).
 2. `ImmutableImporter.Import(files)`
    - Reads each file → produces `UnresolvedModel` (object + list of field/property assignments still in string form).
    - All models are queued and iteratively resolved. Each pass tries to deserialize pending members; unresolved ones are retried until:
@@ -38,39 +63,56 @@ It is designed for:
 Each CSV describes one or more instances. Minimal required header: `Class` and any fields/properties you want to set. `Name` must be present as a field/property on the target class (enforced indirectly because name required for DB key and uniqueness).
 
 ### 4.1 Standard Row‑Per‑Object Format
-Example (`SignatureComponentTypes.csv`):
+Example data:
 ```
 Class,Name,Title,Description,Icon
-SignatureComponentType,SignatureComponentTypeVisualMetal,Metallic,A metallic signature. Usually a ship or an asteroid with high metal content.,T_SignatureBox
-SignatureComponentType,SignatureComponentTypeVisualMineral,Mineral,"A mineral signature. Asteroids, planets, and moons have mineral signatures.",T_SignatureBox
+SomeData,MyData1,My data 1,"This is the description for my data 1",SpriteNameInProject
+SomeData,MyData2,My data 2,"This is the description for my data 2",SpriteNameInProject
 ```
+
 Importer flow:
 - For each row, look up `Class` → find a `Type` with matching `Type.Name` among all scanned assemblies.
 - Instantiate via parameterless constructor.
 - For each header (other than `Class`) try to match a property (public or non‑public instance) first, then a field.
 - Store as an `Unresolved` assignment until successfully deserialized.
 
+Code example:
+```csharp
+class SomeData : Immutable 
+{ 
+    public readonly AssetRef<Sprite> Icon = null; // AssetRef is a special handler that will store type and name.
+}
+
+// Somewhere in initialization (GameManager excerpt paraphrased)
+var files = Directory.GetFiles(Globals.ModelsPath, "*.csv");
+var db = ImmutableImporter.Import(files);
+
+// Retrieve specific immutable
+var myData = db.Get<SomeData>("MyData1");
+Debug.Log(myData.Icon.AssetType.ToString()); // Sprite
+Debug.Log(myData.Icon.Name.ToString()); // SpriteNameInProject
+AssetDatabase.Find(myData.Icon.Name); // pseudo fetch code
+```
+
 ### 4.2 Key–Value Pair (Vertical) Format
 If the file has exactly two headers: `Key` and `Value` it is treated specially:
 - All rows pivoted into a single logical row (one object total).
 - First you still need a `Class` key specifying the target immutable type.
 - Remaining keys become headers with their `Value` cell content.
-Use this when you want a singleton config (e.g. `Config.csv`).
+Use this when you want a singleton config. See useful example in 8.
 
 ### 4.3 Compound / Aggregate Headers
 Headers of the form `BaseName(SubKey)` are grouped.
-Example (`Signatures.csv`):
 ```
-Class,Name,Title,Description,Components(SignatureComponentTypeVisualMetal),Components(SignatureComponentTypeVisualMineral),Components(SignatureComponentTypeVisualLight)
-SignatureData,SignatureShip,Ship,,1,,
-SignatureData,SignatureStar,Star,,,,1
+Class,Name,GroupName(Foo),GroupName(Bar)
+CompoundExample,Example1,FooIsOne,BarIsNone
+CompoundExample,Example2,FooIsTwo,BarIsThree
 ```
-Importer groups the present, non‑empty values into a synthetic single assignment for `BaseName`:
-- Output value string format: `SubKey;Value,SubKey;Value,...`
-- In the `SignatureShip` line this becomes: `"SignatureComponentTypeVisualMetal;1"`
-- In the `SignatureStar` line: `"SignatureComponentTypeVisualLight;1"`
+Essentially what happens is that the field will be aggregated/compounded into one field:
+- In the `Example1` line this becomes: `"Foo;FooIsOne,Bar;BarIsNone"`
+- In the `Example2` line:  `"Foo;FooIsTwo,Bar;BarIsThree"`
 
-Your target field/property (e.g. `public readonly ??? Components`) must know how to parse this aggregated string (custom deserializer or manual `PostImport` processing) — the core plugin does not auto‑expand that further.
+Your target field/property must know how to parse this aggregated string (custom deserializer or manual `PostImport` processing).
 
 ### 4.4 Ordered Types (`[Ordered]` + `OrderAttribute`)
 For compact positional encoding of nested value objects.
@@ -83,7 +125,7 @@ For compact positional encoding of nested value objects.
 Example definition fragment:
 ```csharp
 [Ordered]
-public class Range : Immutable // could also be a plain support class
+public class Range // Not recommended to extend Immutable for Ordered classes.
 {
     [Order(0)] public readonly int Min;
     [Order(1)] public readonly int Max;
@@ -91,13 +133,46 @@ public class Range : Immutable // could also be a plain support class
 ```
 CSV cell example: `Range:10;25` assigns `Min=10`, `Max=25`.
 
+Name can be omitted if field is specific type.
+```csharp
+abstract class Condition 
+{
+    public abstract bool Check(int value);
+}
+
+[Ordered]
+class Above : Condition 
+{
+    [Order(0)] public readonly int Value;
+    public override bool Check(int value) => value > Value;  
+}
+
+[Ordered]
+class Below : Condition 
+{
+    [Order(0)] public readonly int Value;
+    public override bool Check(int value) => value < Value;
+}
+
+class Foo : Immutable
+{
+    public readonly Range MyRange; // Will not require type name.
+    public readonly ImmutableList<Condition> Conditions; // Will require type name.
+}
+```
+```
+Class,Name,MyRange,Conditions
+Foo,Foo,0;100,"Above:100,Below:200"
+```
+
 ### 4.5 Lists, Arrays & Weighted Lists
 The importer recognizes certain collection forms:
-| Type Pattern | Representation | Notes |
-| ------------ | -------------- | ----- |
-| `T[]` (array) | `a,b,c` or bracketed `[a,b,c]` | Brackets optional; internal logic can parse both. |
-| `ImmutableList<T>` | `[a,b,c]` or simple comma list | Empty string → `ImmutableList<T>.Empty`. |
-| `WeightedList<T>` | `value:weight,value:weight,...` | Cannot be empty; weight parsed as `double`. |
+
+| Type Pattern | Representation | Notes                                                                                                                                                |
+| ------------ | -------------- |------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `T[]` (array) | `a,b,c` or bracketed `[a,b,c]` | Brackets optional; internal logic can parse both. Use brackets for nested arrays. `[[1,2,3],[1,2,3],[1,2,3]]` will deserialize into list of 3 lists. |
+| `ImmutableList<T>` | `[a,b,c]` or simple comma list | Empty string → `ImmutableList<T>.Empty`.                                                                                                             |
+| `WeightedList<T>` | `value:weight,value:weight,...` | Cannot be empty; weight parsed as `double`.                                                                                                          |
 
 Internally, brackets trigger a specialized block parser (`ParseArrays`) so nested list/array or composite types encoded inside a single cell can work. If multiple top-level arrays are found in one cell (e.g. `[...] [...]`) it's treated as malformed.
 
@@ -108,6 +183,7 @@ Form: `LIN(steps,min,max)`, `LOG(...)`, `EXP(...)`, `MUL(...)`:
 - `LOG(5,1,1000)` → logarithmic.
 - `EXP(5,2,64)` → exponential.
 - `MUL(5,2,1.5)` → multiplicative progression (floored each iteration).
+
 If this pattern matches, it overrides normal comma splitting.
 
 ### 4.7 Null / Empty Cells
@@ -119,22 +195,23 @@ The importer tries deserializers in the order defined by `BasicDeserializerProvi
 1. `ValueTypesDeserializer` – primitives, nullable primitives, numeric types with units, enums (supports symbolic operators like ">=" → `GreaterOrEqual`).
 2. `ImmutableDeserializer` – resolves references to previously imported immutables by `Name` (deferred resolution ensures eventual success if ordering allows).
 3. `OrderedTypeDeserializer` – `[Ordered]` classes with `[Order]` members and their positional encoding.
-4. `AssetRefDeserializer` – (legacy / obsolete pattern) turns a string name into an `AssetRef<T>` wrapper.
+4. `AssetRefDeserializer` – turns a string name into an `AssetRef<T>` wrapper.
 5. `TimeSpanDeserializer` – parses composite duration strings like `5h30m` or `250ms` (orderless token accumulation).
 6. `TypeRefDeserializer` – wraps a named runtime `Type` in a `TypeRef` value.
 
-If none claim a type → `No deserializer found for type {TypeName}`.
+If none of the deserializers can deserialize the field an exception is thrown.
 
 ## 6. Reference & Resolution Mechanics
 Because an immutable may reference another one defined later (or in another CSV):
 - Each string field/property is stored as an `Unresolved` record initially.
 - Passes repeatedly attempt to `TryDeserialize`. Successful ones are removed.
-- Name uniqueness is enforced early (`CheckNameConflicts`) by inspecting the unresolved `Name` field values. If two objects across any types share a `Name`, import aborts.
+- Name uniqueness is enforced early (`CheckNameConflicts`) by inspecting the unresolved `Name` field values. If two objects with same type share a `Name`, import aborts.
 - Maximum 1000 iterations guard prevents infinite loops (typical cause: typos in reference names or impossible circular dependency that requires runtime context to break).
 - On failure, breadcrumbs show last 10 actions (e.g., file being processed, failed deserialization attempts from `ImmutableDeserializer`).
 
 ## 7. Lifecycle Hooks in `Immutable`
 Override these in derived types when needed:
+
 | Method | Timing | Purpose |
 | ------ | ------ | ------- |
 | `PrePostImport` | After all objects constructed & inserted but before `PostImport` | Early normalization / caching before deeper cross-object logic runs. |
@@ -142,20 +219,52 @@ Override these in derived types when needed:
 | `PostImport<T>(ImmutableDatabase db, T gameState)` | Later game bootstrap stage | Optionally tie immutable data to runtime state. |
 | `Validate(Result r)` | After `PostImport` | Return false and add error to abort import with a descriptive exception. |
 
-## 8. Example: Using Imported Data
 ```csharp
-// Somewhere in initialization (GameManager excerpt paraphrased)
-var files = Directory.GetFiles(Globals.ModelsPath, "*.csv");
-var db = ImmutableImporter.Import(files);
-
-// Retrieve specific immutable
-var signature = db.Get<SignatureData>("SignatureStar");
-
-// Iterate all trait data
-foreach (var trait in db.GetAll<ActorTraitData>())
+bool Validate(Result r)
 {
-    // use trait.Category, trait.ActorEffects, etc.
+    if (r.ErrorOnFalse(false, "This is an error."))
+        return false;
+    return true;
 }
+```
+
+## 8. Example: Useful way to hook into data without hardcoding names
+
+CSV:
+```csv
+Class,Name,ImportantValue
+OtherData,SpecificName1,"This is very important"
+OtherData,SpecificName2,"This is also very important"
+OtherData,SpecificName3,"I lied, this is not important"
+```
+```csv
+Key,Value
+Class,Config
+OtherDataReference1,SpecificName1
+OtherDataReference2,SpecificName2
+OtherDataReference3,SpecificName3
+```
+
+```csharp
+#nullable enable
+
+class OtherData : Immutable 
+{
+    public readonly string ImportantValue = "";
+}
+
+class Config : Immutable 
+{
+    public readonly OtherData OtherDataReference1 = null!;
+    public readonly OtherData OtherDataReference1 = null!;
+    public readonly OtherData OtherDataReference1 = null!;
+}
+```
+```csharp
+var files = Directory.GetFiles("SOME_PATH_WITH_CSV", "*.csv");
+var db = ImmutableImporter.Import(files);
+var config = db.Get<Config>(); // Will get the first instance of Config in any csv.
+Console.WriteLine(config.OtherDataReference1.ImportantValue);
 ```
 
 ## 9. Example: Defining a New Immutable Type
@@ -227,12 +336,15 @@ Look at the thrown exception's included "Last 10 breadcrumbs:" section to see th
 ## 15. Extending Assembly Scanning
 Supply a custom `IAssemblyProvider` if immutables live across multiple assemblies:
 ```csharp
-public class GameAssemblyProvider : IAssemblyProvider
+public class CustomAssemblyProvider : IAssemblyProvider
 {
+    public static Assembly DirectAssemblyReference;
+
     public IEnumerable<Assembly> Assemblies => new []
     {
-        typeof(Immutable).Assembly,
-        typeof(ActorTraitData).Assembly, // etc.
+        typeof(Immutable).Assembly, // Required
+        typeof(ExtendFromThisType).Assembly, 
+        DirectAssemblyReference // etc.
     };
 }
 ImmutableImporter.AssemblyProvider = new GameAssemblyProvider();
@@ -241,20 +353,14 @@ Set this before calling `Import`.
 
 ## 17. Safety & Immutability Model
 - Fields are `readonly` but assigned via reflection (including private backing fields for auto-properties). Mutability after import depends on you not exposing setters or mutable collections. Use `ImmutableList<T>` over `List<T>` to enforce immutability.
+- System.Collections.Immutable support is built in.
 
 ## 19. Known Limitations / Caveats
-- Global `Name` namespace: No per‑type scoping.
-- No built‑in schema versioning; changing field order or meaning in `[Ordered]` classes is risky across content updates.
 - `TypeRefDeserializer` only searches by simple type name in loaded (non-dynamic) assemblies; ambiguous type names can collide silently (first match wins).
 - Bracketed block parsing for ordered types does not support nested bracket depth >1. This is by design to keep csv human readable.
 
 ## 20. Future Improvement Ideas
 - Replace custom recursive assignability checks with standard `IsAssignableFrom` where appropriate.
-- Add optional per‑type namespace or alias to allow duplicate `Name` values across different immutable categories.
 - Provide built‑in parser for compound aggregate base patterns (e.g., produce dictionary automatically).
 - Extend `WeightedList<T>` deserialization to support bracketed groups and inline comments.
 - Add CSV schema linting pass to catch unused headers or unmatched class names early.
-
----
-If you need further clarification or want automation helpers (e.g. generator for new immutable classes + CSV template), that can be added on request.
-
