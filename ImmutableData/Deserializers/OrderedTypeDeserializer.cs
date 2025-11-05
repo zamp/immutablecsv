@@ -91,17 +91,14 @@ namespace ImmutableData.Deserializers
             deserializedObject = Activator.CreateInstance(classType);
 
             if (hasProperties)
-	            SetOrderedProperties(type, ref deserializedObject, orderedProperties, splitData);
-            else 
-	            SetOrderedFields(type, ref deserializedObject, orderedFields, splitData);
-
-            return true;
+	            return TrySetOrderedProperties(type, ref deserializedObject, orderedProperties, splitData);
+	        return TrySetOrderedFields(type, ref deserializedObject, orderedFields, splitData);
         }
 
-        private static void SetOrderedProperties(Type type, ref object value, Dictionary<int, PropertyInfo> orderedProperties, List<string> splitData)
+        private static bool TrySetOrderedProperties(Type type, ref object value, Dictionary<int, PropertyInfo> orderedProperties, List<string> splitData)
         {
-            if (splitData.Count == 0)
-                return;
+	        if (splitData.Count == 0)
+		        return false;
             
             var j = 0;
             var skippedNullable = false;
@@ -142,15 +139,21 @@ namespace ImmutableData.Deserializers
                 {
                     orderedProperty.Value.SetValue(value, nullableObj);
                 }
+                else
+                {
+	                return false;
+                }
 
                 j++;
             }
+
+            return true;
         }
         
-        private static void SetOrderedFields(Type type, ref object value, Dictionary<int, FieldInfo> orderedFields, List<string> splitData)
+        private static bool TrySetOrderedFields(Type type, ref object value, Dictionary<int, FieldInfo> orderedFields, List<string> splitData)
         {
-            if (splitData.Count == 0)
-                return;
+	        if (splitData.Count == 0)
+		        return false;
             
             var j = 0;
             var skippedNullable = false;
@@ -173,20 +176,28 @@ namespace ImmutableData.Deserializers
 
                 if (nullableType == null)
                 {
-                    if (ImmutableImporter.TryDeserialize(propertyType, propertyData, out var obj))
-                    {
-	                    orderedField.Value.SetValue(value, obj);
-                    }
-                    else
-                        throw new InvalidDataException($"Could not deserialize value '{propertyData}' for property {propertyType}.");
+	                if (ImmutableImporter.TryDeserialize(propertyType, propertyData, out var obj))
+	                {
+		                orderedField.Value.SetValue(value, obj);
+	                }
+	                else
+	                {
+		                return false;
+	                }
                 }
                 else if (ImmutableImporter.TryDeserialize(nullableType, propertyData, out var nullableObj))
                 {
                     orderedField.Value.SetValue(value, nullableObj);
                 }
+                else
+                {
+	                return false;
+                }
 
                 j++;
             }
+
+            return true;
         }
     }
 }

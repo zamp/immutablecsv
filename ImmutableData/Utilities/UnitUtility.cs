@@ -33,6 +33,14 @@ namespace ImmutableData.Utilities
 			{"Yg", 1e24},      // yottagram
 		};
 		
+		private static readonly Dictionary<string, double> Pressure = new()
+		{
+			{"Pa", 1},               // Pascal
+			{"kPa", 1e3},            // Kilopascal
+			{"MPa", 1e6},            // Megapascal
+			{"GPa", 1e9},            // Gigapascal
+		};
+		
 		private static readonly Dictionary<string, double> Distance = new()
 		{
 			{"mm", 0.001},			 // millimeter
@@ -68,7 +76,17 @@ namespace ImmutableData.Utilities
 		/// </summary>
 		public static string ToMassString(this double value)
 		{
-			var list = Mass.Select(@decimal => $"{value / @decimal.Value:F} {@decimal.Key}").ToList();
+			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
+			list.Sort(LengthSort);
+			return list[0];
+		}
+		
+		/// <summary>
+		/// Returns a value with least digits
+		/// </summary>
+		public static string ToPressureString(this double value)
+		{
+			var list = Pressure.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
 			list.Sort(LengthSort);
 			return list[0];
 		}
