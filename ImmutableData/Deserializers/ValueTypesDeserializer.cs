@@ -8,7 +8,7 @@ namespace ImmutableData.Deserializers
 {
     public class ValueTypesDeserializer : IImmutableDeserializer
     {
-        private static readonly Regex UnitRegex = new (@"^(-?\d+\.?\d*)\s*(%|\w*)", RegexOptions.Compiled);
+	    private static readonly Regex UnitRegex = new(@"^(-?\d+\.?\d*)\s*(%|°\w+|\w+)?", RegexOptions.Compiled);
         
         private static readonly List<Type> SerializableTypes = new List<Type>
         {
