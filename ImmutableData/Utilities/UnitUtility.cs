@@ -37,6 +37,7 @@ namespace ImmutableData.Utilities
 		{
 			{"Pa", 1},               // Pascal
 			{"kPa", 1e3},            // Kilopascal
+			{"bar", 1e5},            // Bar
 			{"MPa", 1e6},            // Megapascal
 			{"GPa", 1e9},            // Gigapascal
 		};
@@ -140,6 +141,15 @@ namespace ImmutableData.Utilities
 
 		private static int LengthSort(string a, string b)
 		{
+			var leadZeroA = a[0] == '0';
+			var leadZeroB = b[0] == '0';
+			
+			if (leadZeroA && leadZeroB)
+				return a.Length.CompareTo(b.Length);
+			if (leadZeroA)
+				return 1;
+			if (leadZeroB)
+				return -1;
 			return a.Length.CompareTo(b.Length);
 		}
 	}
