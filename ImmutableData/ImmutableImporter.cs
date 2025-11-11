@@ -20,7 +20,7 @@ namespace ImmutableData
 	public static class ImmutableImporter
 	{
 		public static IDeserializerProvider DeserializerProvider = new BasicDeserializerProvider();
-		public static IAssemblyProvider AssemblyProvider = new BasicAssemblyProvider();
+		public static IAssemblyProvider AssemblyProvider = null;
 
 		public const char ArrayStart = '[';
 		public const char ArrayEnd = ']';
@@ -293,17 +293,19 @@ namespace ImmutableData
 		private static IEnumerable<UnresolvedModel> GetUnresolvedModelsFromFiles(IEnumerable<string> files)
 		{
 			// get all unresolved models from files
+			var types = GetTypes();
+			
 			foreach (var file in files)
 			{
 				Breadcrumbs.Add($"Importing file {file}");
-				foreach (var unresolved in GetUnresolvedModelsFromFile(file))
+				foreach (var unresolved in GetUnresolvedModelsFromFile(types, file))
 				{
 					yield return unresolved;
 				}
 			}
 		}
 
-		private static IEnumerable<UnresolvedModel> GetUnresolvedModelsFromFile(string path)
+		private static IEnumerable<UnresolvedModel> GetUnresolvedModelsFromFile(List<Type> types, string path)
 		{
 			using var reader = new CsvFileReader(path, EmptyLineBehavior.Ignore);
 
@@ -319,8 +321,6 @@ namespace ImmutableData
 			{
 				headers.Add(row[i], i);
 			}
-
-			var types = GetTypes();
 
 			var isKeyValuePairs = headers.Count == 2 && headers.ContainsKey(KeyHeader) && headers.ContainsKey(ValueHeader);
 
@@ -489,11 +489,14 @@ namespace ImmutableData
 		public static List<Type> GetTypes()
 		{
 			var types = new List<Type>();
-			foreach (var assembly in AssemblyProvider.Assemblies)
+			types.Add(typeof(Immutable));
+			if (AssemblyProvider != null)
 			{
-				types.AddRange(assembly.GetTypes());
+				foreach (var assembly in AssemblyProvider.GetAssemblies())
+				{
+					types.AddRange(assembly.GetTypes());
+				}
 			}
-
 			types = types.Distinct().ToList();
 			return types;
 		}

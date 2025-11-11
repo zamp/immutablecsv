@@ -5,6 +5,6 @@ namespace ImmutableData
 {
     public interface IAssemblyProvider
     {
-        IEnumerable<Assembly> Assemblies { get; }
+	    IEnumerable<Assembly> GetAssemblies();
     }
 }

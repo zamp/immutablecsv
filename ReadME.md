@@ -1,39 +1,64 @@
 # immutablecsv Plugin Documentation
 
 ## 1. Purpose & High‑Level Overview
-`immutablecsv` is a lightweight, reflection‑driven data import system for Unity (will probably work outside of Unity too) that turns a set of CSV definition files (shipped in `StreamingAssets`) into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
-
-It is designed for:
-- Rapid iteration on game balance / content using spreadsheets.
-- Deterministic, read‑only data objects ("immutables") referenced anywhere in gameplay code.
-- Zero manual wiring: types are auto‑discovered via assemblies + reflection.
-- Cross‑referencing between immutable objects by `Name`.
+`immutablecsv` is a lightweight, reflection‑driven data import system for Unity (will probably work outside of Unity too) that turns a set of CSV data files into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
 
 ### Usage:
 CSV:
 ```
 Class,Name,Value
 SomeData,SomeDataInCsv,1234
+
+Class,Value,ValueProperty
+SomeConfig,4321,Foobar
 ```
 
 C#:
 ```csharp
+class SomeData : Immutable
+{
+    public readonly int Value = 0; // Default value will be used if not present in CSV.
+}
+class SomeConfig : Immutable
+{
+    public readonly int Value = 0; // Default value will be used if not present in CSV.
+    public string ValueProperty { get; } = "No data in csv"; // Both readonly values and properties are supported.
+}
+class CustomAssemblyProvider : IAssemblyProvider
+{
+    IEnumerable<Assembly> IAssemblyProvider.GetAssemblies()
+    {
+        // Add your own assemblies here.
+        yield return typeof(SomeData).Assembly;
+    }
+}
+
 // Import csv
 var files = Directory.GetFiles("PATH_WITH_CSV_FILES", "*.csv");
+
+// You can override the default provider if you have custom deserializers.
+//ImmutableImporter.DeserializerProvider = new CustomDeserializerProvider();
+
+// You should override the default provider, otherwise your own immutable types are not found.
+ImmutableImporter.AssemblyProvider = new CustomAssemblyProvider();
+
 var db = ImmutableImporter.Import(files);
 
-// Retrieve specific immutable
+// Use case 1: Retrieve specific SomeData immutable by name. Names are type specific
 var someData = db.Get<SomeData>("SomeDataInCsv");
+Debug.Log(someData.Value); // 1234
 
-// Iterate all immutables of type
+// Use case 2: Iterate all immutables of type
 foreach (var moreData in db.GetAll<SomeData>())
 {
     // Use moreData here
-    if (moreData.Value > 0)
-    {
-        // Not zero
-    }
+    Debug.Log(moreData.Value); // 1234
 }
+
+// Use case 3: csv data can be given no name. The importer will use the class name as a key.
+var someConfig = db.Get<SomeConfig>();
+Debug.Log(someConfig.Value); // 4321
+Debug.Log(someConfig.ValueProperty); // 4321
 ```
 
 ## 2. Core Concepts
@@ -99,7 +124,13 @@ If the file has exactly two headers: `Key` and `Value` it is treated specially:
 - All rows pivoted into a single logical row (one object total).
 - First you still need a `Class` key specifying the target immutable type.
 - Remaining keys become headers with their `Value` cell content.
-Use this when you want a singleton config. See useful example in 8.
+
+```
+Key,Value
+Class,SomeConfig
+Value,1234
+SomeOtherValue,"Foo"
+```
 
 ### 4.3 Compound / Aggregate Headers
 Headers of the form `BaseName(SubKey)` are grouped.
@@ -191,7 +222,7 @@ If this pattern matches, it overrides normal comma splitting.
 - Empty string for arrays / lists produces an empty collection (except `WeightedList<T>` which throws).
 
 ## 5. Deserialization Pipeline
-The importer tries deserializers in the order defined by `BasicDeserializerProvider`:
+The importer tries deserializers in the order defined by the given provider. Default is `BasicDeserializerProvider`:
 1. `ValueTypesDeserializer` – primitives, nullable primitives, numeric types with units, enums (supports symbolic operators like ">=" → `GreaterOrEqual`).
 2. `ImmutableDeserializer` – resolves references to previously imported immutables by `Name` (deferred resolution ensures eventual success if ordering allows).
 3. `OrderedTypeDeserializer` – `[Ordered]` classes with `[Order]` members and their positional encoding.
