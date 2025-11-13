@@ -65,13 +65,21 @@ namespace ImmutableData
 		}
 
 		public static readonly List<string> Breadcrumbs = new();
+		private static readonly List<IImmutableDeserializer> Deserializers = new();
 
 		public static ImmutableDatabase Import(string[] files)
 		{
 			files = files.Distinct().ToArray();
+
+			Deserializers.Clear();
+			foreach (var provider in DeserializerProvider.Providers)
+			{
+				Deserializers.AddRange(provider.Deserializers);
+			}
+			
 			try
 			{
-				return ResolveModels(GetUnresolvedModelsFromFiles(files.Distinct()).ToList());
+				return ResolveModels(GetUnresolvedModelsFromFiles(files).ToList());
 			}
 			catch (Exception e)
 			{
@@ -275,7 +283,7 @@ namespace ImmutableData
 				return true;
 			}
 
-			var deserializer = DeserializerProvider.Deserializers.FirstOrDefault(x => x.CanDeserialize(type));
+			var deserializer = Deserializers.FirstOrDefault(x => x.CanDeserialize(type));
 
 			if (deserializer == null)
 			{

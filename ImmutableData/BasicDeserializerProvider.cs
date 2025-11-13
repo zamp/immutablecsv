@@ -5,7 +5,12 @@ namespace ImmutableData
 {
     public class BasicDeserializerProvider : IDeserializerProvider
     {
-        public IEnumerable<IImmutableDeserializer> Deserializers => new List<IImmutableDeserializer>()
+	    public IEnumerable<IDeserializerProvider> Providers => new List<IDeserializerProvider>
+	    {
+		    new BasicDeserializerProvider()
+	    };
+
+	    public IEnumerable<IImmutableDeserializer> Deserializers => new List<IImmutableDeserializer>
         {
             // Ordered with most likely to be used first
             new ValueTypesDeserializer(),

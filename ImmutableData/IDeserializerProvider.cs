@@ -5,6 +5,7 @@ namespace ImmutableData
 {
     public interface IDeserializerProvider
     {
+	    IEnumerable<IDeserializerProvider> Providers { get; }
         IEnumerable<IImmutableDeserializer> Deserializers { get; }
     }
 }
