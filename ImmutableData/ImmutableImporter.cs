@@ -457,7 +457,8 @@ namespace ImmutableData
 			foreach (var kvp in compoundGroups)
 			{
 				var baseName = kvp.Key;
-				var joined = string.Join(",", kvp.Value.Select(x => $"{x.subKey};{x.value}"));
+				
+				var joined = string.Join(ArrayDelimiter, kvp.Value.Select(x => $"{x.subKey}{InlineDelimiter}{x.value}"));
 
 				var fieldInfo = type.GetField(baseName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 				if (fieldInfo != null)
@@ -754,7 +755,7 @@ namespace ImmutableData
 
 			foreach (var item in split)
 			{
-				var chunks = item.Split(':');
+				var chunks = item.Split(InlineDelimiter);
 
 				if (!double.TryParse(chunks[1], out var weight))
 					throw new Exception($"Could not parse weight value ({chunks[1]}).");
