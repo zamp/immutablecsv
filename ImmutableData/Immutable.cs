@@ -7,8 +7,6 @@ namespace ImmutableData
 	public class Immutable : IComparable<Immutable>
 	{
 		public readonly string Name = null!;
-		public readonly string Title = null!;
-		public readonly string Description = null!;
 
 		public int CompareTo(Immutable other)
 		{
