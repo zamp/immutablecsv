@@ -85,6 +85,26 @@ namespace ImmutableData.Utilities
 		/// <summary>
 		/// Returns a value with least digits
 		/// </summary>
+		public static string ToMassString(this int value)
+		{
+			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
+			list.Sort(LengthSort);
+			return list[0];
+		}
+		
+		/// <summary>
+		/// Returns a value with least digits
+		/// </summary>
+		public static string ToMassString(this long value)
+		{
+			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
+			list.Sort(LengthSort);
+			return list[0];
+		}
+		
+		/// <summary>
+		/// Returns a value with least digits
+		/// </summary>
 		public static string ToPressureString(this double value)
 		{
 			var list = Pressure.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
