@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace ImmutableData.Deserializers
 {
     public class TypeRefDeserializer : IImmutableDeserializer
     {
-        public bool CanDeserialize(Type type)
+	    private static readonly List<Type> _matches = new();
+
+	    public bool CanDeserialize(Type type)
         {
             return typeof(TypeRef).IsAssignableFrom(type);
         }
@@ -16,29 +19,57 @@ namespace ImmutableData.Deserializers
 
             if (TryGetType(typeName, out var assemblyType))
             {
-                deserializedObject = new TypeRef(assemblyType);
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(TypeRef<>))
+                {
+                    deserializedObject = Activator.CreateInstance(type, assemblyType);
+                }
+                else
+                {
+                    deserializedObject = new TypeRef(assemblyType);
+                }
                 return true;
             }
-            
+
             deserializedObject = null;
             return false;
         }
 
         internal static bool TryGetType(string typeName, out Type type)
         {
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+	        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+	        _matches.Clear();
+	        
+            foreach (var assembly in assemblies)
             {
                 type = null;
 
                 if (assembly == null || string.IsNullOrEmpty(typeName))
-                    return false;
+	                continue;
 
                 if (assembly.IsDynamic)
-                    return false;
+	                continue;
 
                 type = assembly.GetType(typeName, false, false);
+                if (type != null)
+	                return true;
+                
+                type = assembly.GetTypes().FirstOrDefault(x => x.Name == typeName);
+                if (type != null)
+                {
+	                _matches.Add(type);
+                }
+            }
 
-                return type != null;
+            #if UNITY_5_3_OR_NEWER
+            if (_matches.Count > 1)
+            {
+	            UnityEngine.Debug.LogWarning($"More than one type found for name: {typeName}");
+            }
+            #endif
+            if (_matches.Count > 0)
+            {
+	            type = _matches[0];
+	            return true;
             }
 
             type = null;

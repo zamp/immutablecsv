@@ -6,51 +6,55 @@ namespace ImmutableData.Utilities
 {
 	public static class UnitUtility
 	{
-		// NOTICE! If you add more make them lowercase!
-		// NOTICE! If you add more make them lowercase!
-		// NOTICE! If you add more make them lowercase!
-		
-		private static readonly Dictionary<string, double> Special = new()
+		public static readonly Dictionary<string, double> Special = new()
 		{
 			{"%", 0.01},
 			{"pi", Math.PI},
 			{"π", Math.PI}
 		};
-		
-		private static readonly Dictionary<string, double> Mass = new()
+
+		public static readonly Dictionary<string, (double kg, double minDisplay)> Mass = new()
 		{
-			{"g", 0.001},      // gram
-			{"kg", 1},         // kilogram
-			{"t", 1e3},        // tonne
-			{"kt", 1e6},       // kilotonne
-			{"Mt", 1e9},       // megatonne
-			{"Gt", 1e12},      // gigatonne
-			{"Tt", 1e15},      // teratonne
-			{"Tg", 1e12},      // teragram
-			{"Pg", 1e15},      // petagram
-			{"Eg", 1e18},      // exagram
-			{"Zg", 1e21},      // zettagram
-			{"Yg", 1e24},      // yottagram
+			{ "g", (0.001, 1) }, // gram
+			{ "kg", (1, 1) }, // kilogram
+			{ "t", (1e3, 1) }, // tonne
+			{ "kt", (1e6, 1) }, // kilotonne
+			{ "Mt", (1e9, 1) }, // megatonne
+			{ "Gt", (1e12, 1) }, // gigatonne
+			{ "Tt", (1e15, 1) }, // teratonne
+			{ "Tg", (1e12, 1) }, // teragram
+			{ "Pg", (1e15, 1) }, // petagram
+			{ "Eg", (1e18, 1) }, // exagram
+			{ "Zg", (1e21, 1) }, // zettagram
+			{ "Yg", (1e24, 1) }, // yottagram
+		};
+
+		public static readonly Dictionary<string, (double pascal, double minDisplay)> Pressure = new()
+		{
+			{ "Pa", (1, 1) }, // Pascal
+			{ "kPa", (1e3, 1) }, // Kilopascal
+			{ "bar", (1e5, 1) }, // Bar
+			{ "MPa", (1e6, 1) }, // Megapascal
+			{ "GPa", (1e9, 1) }, // Gigapascal
+		};
+
+		public static readonly Dictionary<string, (double meters, double minDisplay)> Distance = new()
+		{
+			{ "mm", (0.001, 1) }, // millimeter
+			{ "cm", (0.01, 1) }, // centimeter
+			{ "m", (1, 1) }, // meter
+			{ "km", (1000, 5) }, // kilometer
+			{ "Mm", (10000000, 10) }, // megameter
+			{ "Ls", (299792458, 0.1) }, // light seconds
+			{ "Lm", (17987547480, 1) }, // light minutes
+			{ "Lh", (1079252848800, 1) }, // light hours
+			{ "Ld", (25902068371200, 1) }, // light days
+			{ "Ly", (9460730472580800, 1) } // light years
 		};
 		
-		private static readonly Dictionary<string, double> Pressure = new()
-		{
-			{"Pa", 1},               // Pascal
-			{"kPa", 1e3},            // Kilopascal
-			{"bar", 1e5},            // Bar
-			{"MPa", 1e6},            // Megapascal
-			{"GPa", 1e9},            // Gigapascal
-		};
-		
-		private static readonly Dictionary<string, double> Distance = new()
-		{
-			{"mm", 0.001},			 // millimeter
-			{"cm", 0.01},			 // centimeter
-			{"m", 1},			     // meter
-			{"km", 1000},			 // kilometer
-			{"Ls", 299792458},		 // light seconds
-			{"Ly", 9460730472580800} // light years
-		};
+		public static readonly KeyValuePair<string, (double kg, double minDisplay)>[] MassOrdered = Mass.OrderBy(d => d.Value).ToArray();
+		public static readonly KeyValuePair<string, (double pascal, double minDisplay)>[] PressureOrdered = Pressure.OrderBy(d => d.Value).ToArray();
+		public static readonly KeyValuePair<string, (double meters, double minDisplay)>[] DistanceOrdered = Distance.OrderBy(d => d.Value).ToArray();
 		
 		private static readonly Dictionary<string, Func<double, double>> Temperature = new()
 		{
@@ -63,12 +67,14 @@ namespace ImmutableData.Utilities
 		{
 			if (Special.TryGetValue(unit, out var multiplier))
 				return value * multiplier;
-			if (Mass.TryGetValue(unit, out multiplier))
-				return value * multiplier;
-			if (Distance.TryGetValue(unit, out multiplier))
-				return value * multiplier;
+			if (Mass.TryGetValue(unit, out var mass))
+				return value * mass.kg;
+			if (Distance.TryGetValue(unit, out var distance))
+				return value * distance.meters;
 			if (Temperature.TryGetValue(unit, out var conversion))
 				return conversion(value);
+			if (Pressure.TryGetValue(unit, out var pressure))
+				return value * pressure.pascal;
 			return value;
 		}
 		
@@ -77,29 +83,14 @@ namespace ImmutableData.Utilities
 		/// </summary>
 		public static string ToMassString(this double value)
 		{
-			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
-			list.Sort(LengthSort);
-			return list[0];
-		}
-		
-		/// <summary>
-		/// Returns a value with least digits
-		/// </summary>
-		public static string ToMassString(this int value)
-		{
-			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
-			list.Sort(LengthSort);
-			return list[0];
-		}
-		
-		/// <summary>
-		/// Returns a value with least digits
-		/// </summary>
-		public static string ToMassString(this long value)
-		{
-			var list = Mass.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
-			list.Sort(LengthSort);
-			return list[0];
+			string result = null;
+			foreach (var (symbol, mass) in MassOrdered)
+			{
+				var converted = Math.Round(value / mass.kg, 2);
+				if (converted >= mass.minDisplay)
+					result = $"{converted} {symbol}";
+			}
+			return result;
 		}
 		
 		/// <summary>
@@ -107,28 +98,35 @@ namespace ImmutableData.Utilities
 		/// </summary>
 		public static string ToPressureString(this double value)
 		{
-			var list = Pressure.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
-			list.Sort(LengthSort);
-			return list[0];
+			string result = null;
+			foreach (var (symbol, pressure) in PressureOrdered)
+			{
+				var converted = Math.Round(value / pressure.pascal, 2);
+				if (converted >= pressure.minDisplay)
+					result = $"{converted} {symbol}";
+			}
+			return result;
 		}
 		
-		/// <summary>
-		/// Returns a value with least digits
-		/// </summary>
 		public static string ToDistanceString(this double value)
 		{
-			var list = Distance.Select(@decimal => $"{TruncateDouble(value / @decimal.Value)} {@decimal.Key}").ToList();
-			list.Sort(LengthSort);
-			return list[0];
+			string result = null;
+			foreach (var (symbol, distance) in DistanceOrdered)
+			{
+				var converted = Math.Round(value / distance.meters, 2);
+				if (converted >= distance.minDisplay)
+					result = $"{converted} {symbol}";
+			}
+			return result;
 		}
 		
 		public static string TruncateDouble(double value)
 		{
 			// If value >= 1, return without decimals
-			if (value >= 1)
+			/*if (value >= 1)
 			{
 				return ((int)value).ToString();
-			}
+			}*/
     
 			// Handle zero
 			if (value == 0)
