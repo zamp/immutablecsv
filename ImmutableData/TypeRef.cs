@@ -15,4 +15,14 @@ namespace ImmutableData
 			Type = type;
 		}
 	}
+
+	[Serializable]
+	public class TypeRef<T> : TypeRef where T : class
+	{
+		public TypeRef(Type type) : base(type)
+		{
+		}
+
+		public T CreateInstance() => (T)Activator.CreateInstance(Type);
+	}
 }
