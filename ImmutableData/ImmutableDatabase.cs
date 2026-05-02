@@ -85,7 +85,7 @@ namespace ImmutableData
         /// <returns></returns>
         public IEnumerable<T> GetAll<T>() where T : Immutable
         {
-            return _database.Values.Where(x => x is T).Cast<T>();
+            return _database.Values.OfType<T>();
         }
 
         public bool Validate(Result result)
