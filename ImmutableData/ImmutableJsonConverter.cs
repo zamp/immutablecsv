@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -7,10 +10,12 @@ namespace ImmutableData
 	public class ImmutableJsonConverter : JsonConverter
 	{
 		private ImmutableDatabase _immutables;
+		private readonly List<Assembly> _assemblies;
 
-		public ImmutableJsonConverter(ImmutableDatabase database)
+		public ImmutableJsonConverter(ImmutableDatabase database, IAssemblyProvider assemblyProvider)
 		{
 			_immutables = database;
+			_assemblies = assemblyProvider.GetAssemblies().ToList();
 		}
 
 		public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
@@ -36,7 +41,19 @@ namespace ImmutableData
 			var type = token["Type"].ToString();
 			var name = token["Name"].ToString();
 
-			var actualType = _immutables.GetType().Assembly.GetType(type);
+			Type actualType = null;
+			foreach (var assembly in _assemblies)
+			{
+				actualType = assembly.GetType(type);
+				if (actualType != null)
+					break;
+			}
+
+			if (actualType == null)
+			{
+				throw new Exception($"Could not find type {type} in any assembly.");
+				// TODO: recycle here.
+			}
 
 			return _immutables.Get(actualType, name);
 		}

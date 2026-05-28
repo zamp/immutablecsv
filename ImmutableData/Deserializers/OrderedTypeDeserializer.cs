@@ -133,7 +133,9 @@ namespace ImmutableData.Deserializers
                         }
                     }
                     else
-                        throw new InvalidDataException($"Could not deserialize value '{propertyData}' for property {propertyType}.");
+                    {
+	                    return false;
+                    }
                 }
                 else if (ImmutableImporter.TryDeserialize(nullableType, propertyData, out var nullableObj))
                 {

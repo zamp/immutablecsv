@@ -19,7 +19,7 @@ namespace ImmutableData.Deserializers
 		        return true;
 	        }
 
-            ImmutableImporter.Breadcrumbs.Add("Failed to deserialize " + type.Name + " with data " + data);
+            ImmutableImporter.Breadcrumbs.Add("Immutable " + type.Name + " not found with data: " + data);
             deserializedObject = null;
             return false;
         }

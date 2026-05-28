@@ -12,7 +12,20 @@ namespace ImmutableData
         {
 	        if (type == null)
 		        throw new ArgumentNullException($"Type is null");
+
+	        type = GetRootBaseType(type);
+	        
 	        return $"{type.Name}{name}";
+        }
+        
+        private static Type GetRootBaseType(Type type)
+        {
+	        var current = type;
+    
+	        while (current.BaseType != null && current.BaseType != typeof(object))
+		        current = current.BaseType;
+    
+	        return current;
         }
 
         /// <summary>

@@ -10,7 +10,7 @@ namespace ImmutableData
 		
 		private readonly List<string> _errors = new List<string>();
 		
-		internal bool ErrorOnTrue(bool value, string error)
+		public bool ErrorOnTrue(bool value, string error)
 		{
 			if (string.IsNullOrEmpty(error))
 				throw new ArgumentException($"{nameof(error)} is null or empty.");
@@ -19,7 +19,7 @@ namespace ImmutableData
 			return value;
 		}
 		
-		internal bool ErrorOnFalse(bool value, string error)
+		public bool ErrorOnFalse(bool value, string error)
 		{
 			return ErrorOnTrue(!value, error);
 		}
