@@ -7,25 +7,32 @@ namespace ImmutableData
     public class ImmutableDatabase
     {
         private readonly Dictionary<string, Immutable> _database = new();
-        
+
         private string GetIdentifier(Type type, string name)
         {
-	        if (type == null)
-		        throw new ArgumentNullException($"Type is null");
+            if (type == null)
+                throw new ArgumentNullException($"Type is null");
 
-	        type = GetRootBaseType(type);
-	        
-	        return $"{type.Name}{name}";
+            type = GetRootBaseType(type);
+
+            return $"{type.Name}{name}";
         }
-        
+
         private static Type GetRootBaseType(Type type)
         {
-	        var current = type;
-    
-	        while (current.BaseType != null && current.BaseType != typeof(object))
-		        current = current.BaseType;
-    
-	        return current;
+            var current = type;
+
+            while (current.BaseType != null && current.BaseType != typeof(object) && current.BaseType != typeof(Immutable))
+                current = current.BaseType;
+
+            // If the resolved root is marked with [NotImmutableRoot], skip past it
+            // and use the original concrete type as the root instead.
+            if (current.IsDefined(typeof(NotImmutableRoot), false))
+            {
+                current = type;
+            }
+
+            return current;
         }
 
         /// <summary>
@@ -41,8 +48,8 @@ namespace ImmutableData
 
         private void Add(Type type, Immutable immutable)
         {
-	        if (!_database.TryAdd(GetIdentifier(type, immutable.Name), immutable))
-		        throw new Exception($"Immutable with name {immutable.Name} already exists.");
+            if (!_database.TryAdd(GetIdentifier(type, immutable.Name), immutable))
+                throw new Exception($"Immutable with name {immutable.Name} already exists.");
         }
 
         /// <summary>
@@ -55,7 +62,7 @@ namespace ImmutableData
         {
             return (T)Get(typeof(T), name);
         }
-        
+
         /// <summary>
         /// Gets immutable based on name
         /// </summary>
@@ -65,10 +72,10 @@ namespace ImmutableData
         public Immutable Get(Type type, string name)
         {
             if (_database.TryGetValue(GetIdentifier(type,name), out var immutable))
-	            return immutable;
+                return immutable;
             throw new Exception($"No immutable with name {name} of type {type.Name} exists.");
         }
-        
+
         /// <summary>
         /// Checks if immutable exists
         /// </summary>
@@ -77,9 +84,9 @@ namespace ImmutableData
         /// <returns></returns>
         public bool Exists<T>(string name) where T : Immutable
         {
-	        return Exists(typeof(T), name);
+            return Exists(typeof(T), name);
         }
-        
+
         /// <summary>
         /// Checks if immutable exists
         /// </summary>
@@ -88,9 +95,9 @@ namespace ImmutableData
         /// <returns></returns>
         public bool Exists(Type type, string name)
         {
-	        return _database.ContainsKey(GetIdentifier(type, name));
+            return _database.ContainsKey(GetIdentifier(type, name));
         }
-        
+
         /// <summary>
         /// Gets immutables of type
         /// </summary>
@@ -113,13 +120,13 @@ namespace ImmutableData
 
             return true;
         }
-        
+
         public void PrePostImport()
         {
             foreach (var immutable in _database)
                 immutable.Value.PrePostImport(this);
         }
-        
+
         public void PostImport()
         {
             foreach (var immutable in _database)
