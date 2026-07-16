@@ -22,10 +22,12 @@ namespace ImmutableData
 		public static IDeserializerProvider DeserializerProvider = new BasicDeserializerProvider();
 		public static IAssemblyProvider AssemblyProvider = null;
 
+		// TODO: move these to an optional configuration file
 		public const char ArrayStart = '[';
 		public const char ArrayEnd = ']';
 		public const char ArrayDelimiter = ',';
-		public const char InlineDelimiter = ';';
+		public const char InlineDelimiter = '|';
+		public const char TypeDelimiter = ':';
 		public const string ClassHeader = "Class";
 		public const string KeyHeader = "Key";
 		public const string ValueHeader = "Value";
@@ -292,6 +294,7 @@ namespace ImmutableData
 
 			if (deserializer.Deserialize(type, data, out value))
 			{
+				Breadcrumbs.Add($"Deserialized with {deserializer.GetType().Name}");
 				return true;
 			}
 

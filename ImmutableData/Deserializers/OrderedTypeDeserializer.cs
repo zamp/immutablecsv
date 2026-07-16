@@ -19,7 +19,7 @@ namespace ImmutableData.Deserializers
 
         public bool Deserialize(Type type, string data, out object deserializedObject)
         {
-            var parts = data.Split(':');
+            var parts = data.Split(ImmutableImporter.TypeDelimiter);
             var className = parts[0];
             data = parts.Length > 1 ? parts[1] : parts[0];
 
@@ -58,18 +58,18 @@ namespace ImmutableData.Deserializers
             }
 
             var splitData = new List<string>();
-            var split = data.Split(';');
+            var split = data.Split(ImmutableImporter.InlineDelimiter);
 
             var blockStart = 0;
             var readingBlock = false;
             for (var i = 0; i < split.Length; ++i)
             {
-                if (readingBlock && !split[i].EndsWith("]"))
+                if (readingBlock && !split[i].EndsWith(ImmutableImporter.ArrayEnd))
                     continue;
 
                 if (readingBlock)
                 {
-                    var str = string.Join(";", split, blockStart, i - blockStart + 1);
+                    var str = string.Join(ImmutableImporter.InlineDelimiter, split, blockStart, i - blockStart + 1);
                     // trim brackets
                     str = str.Substring(1, str.Length - 2);
                     splitData.Add(str);
@@ -77,7 +77,7 @@ namespace ImmutableData.Deserializers
                     continue;
                 }
 
-                if (split[i].StartsWith("["))
+                if (split[i].StartsWith(ImmutableImporter.ArrayStart))
                 {
                     blockStart = i;
                     readingBlock = true;
