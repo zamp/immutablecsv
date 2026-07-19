@@ -114,6 +114,7 @@ namespace ImmutableData
             {
                 if (!immutable.Value.Validate(result))
                 {
+	                ImmutableImporter.Breadcrumbs.Add($"Immutable name: {immutable.Value.Name}. Type: {immutable.Value.GetType().Name}");
                     return false;
                 }
             }

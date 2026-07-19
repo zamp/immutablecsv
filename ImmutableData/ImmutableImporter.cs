@@ -88,7 +88,7 @@ namespace ImmutableData
 				var error = new StringBuilder();
 				error.AppendLine("Last 10 breadcrumbs:");
 				var count = Math.Min(10, Breadcrumbs.Count);
-				for (var i = Breadcrumbs.Count - count; i < Breadcrumbs.Count; ++i)
+				for (var i = Breadcrumbs.Count - 1; i > Breadcrumbs.Count - count; --i)
 				{
 					error.AppendLine(Breadcrumbs[i]);
 				}
