@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace ImmutableData.Deserializers
 {
@@ -8,7 +9,8 @@ namespace ImmutableData.Deserializers
         
         public bool CanDeserialize(Type type)
         {
-            return typeof(Immutable).IsAssignableFrom(type);
+	        return typeof(Immutable).IsAssignableFrom(type)
+	               || type.IsDefined(typeof(ImmutableReferenceAttribute), true);
         }
 
         public bool Deserialize(Type type, string data, out object deserializedObject)
@@ -17,6 +19,17 @@ namespace ImmutableData.Deserializers
 	        {
 		        deserializedObject = ImmutableDatabase.Get(type, data);
 		        return true;
+	        }
+
+	        if (type.IsDefined(typeof(ImmutableReferenceAttribute), true))
+	        {
+		        var matches = ImmutableDatabase.GetAll<Immutable>()
+		        	.Where(x => x.Name == data && type.IsInstanceOfType(x))
+		        	.Take(2)
+		        	.ToArray();
+
+		        deserializedObject = matches.Length == 1 ? matches[0] : null;
+		        return matches.Length == 1;
 	        }
 
             ImmutableImporter.Breadcrumbs.Add("Immutable " + type.Name + " not found with data: " + data);
