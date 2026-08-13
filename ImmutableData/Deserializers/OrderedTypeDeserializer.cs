@@ -19,11 +19,18 @@ namespace ImmutableData.Deserializers
 
         public bool Deserialize(Type type, string data, out object deserializedObject)
         {
+            var originalData = data;
             var parts = data.Split(ImmutableImporter.TypeDelimiter);
             var className = parts[0];
-            data = parts.Length > 1 ? parts[1] : parts[0];
 
             var classType = type.Assembly.GetTypes().FirstOrDefault(x => x.Name == className);
+
+            // A colon-prefixed name only counts as a polymorphic type override if it actually
+            // resolves to a type compatible with the field's declared type. Otherwise the colon
+            // belongs to nested/inline data (e.g. a value embedded further down the field chain),
+            // not a type tag, and must be left untouched for the caller to re-parse in full.
+            if (classType != null && !type.IsAssignableFrom(classType))
+                classType = null;
 
             if (classType == null)
             {
@@ -32,13 +39,18 @@ namespace ImmutableData.Deserializers
                 {
                     throw new DataException($"No such class found {className}. Lists are not supported.");
                 }
-                
+
                 if (type.IsArray)
                 {
                     throw new DataException($"No such class found {className}. Arrays are not supported.");
                 }
 
                 classType = type;
+                data = originalData;
+            }
+            else
+            {
+                data = parts.Length > 1 ? parts[1] : parts[0];
             }
 
             var orderedProperties = classType.GetProperties()

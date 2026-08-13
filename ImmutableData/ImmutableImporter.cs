@@ -676,6 +676,14 @@ namespace ImmutableData
 						openBracketCount--;
 						if (openBracketCount == 0)
 						{
+							// A leading bracket can group the first field of an ordered list item,
+							// rather than wrap the list itself: [Nested:a|b]|remainingField.
+							if (i + 1 < data.Length && data[i + 1] == InlineDelimiter)
+							{
+								yield return data;
+								yield break;
+							}
+
 							yield return data.Substring(startIndex, i - startIndex);
 						}
 					}
