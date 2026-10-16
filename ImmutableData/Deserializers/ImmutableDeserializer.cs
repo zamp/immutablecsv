@@ -32,7 +32,7 @@ namespace ImmutableData.Deserializers
 		        return matches.Length == 1;
 	        }
 
-            ImmutableImporter.Breadcrumbs.Add("Immutable " + type.Name + " not found with data: " + data);
+            ImmutableImporter.AddBreadcrumb("Immutable " + type.Name + " not found with data: " + data);
             deserializedObject = null;
             return false;
         }

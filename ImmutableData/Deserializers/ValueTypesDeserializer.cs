@@ -56,7 +56,7 @@ namespace ImmutableData.Deserializers
 			var scientificNotationMatches = ScientificNotationRegex.Match(data).Success;
 			if (!scientificNotationMatches && match.Success && !string.IsNullOrEmpty(match.Groups[2].Value))
 			{
-				var unitValue = UnitUtility.Convert(match.Groups[2].Value, float.Parse(match.Groups[1].Value));
+				var unitValue = UnitUtility.Convert(match.Groups[2].Value, float.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture));
 				value = Convert.ChangeType(unitValue, type, CultureInfo.InvariantCulture);
 				return true;
 			}

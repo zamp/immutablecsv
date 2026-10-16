@@ -1,6 +1,5 @@
 using System;
 using System.Text.RegularExpressions;
-using UnityEngine;
 
 namespace ImmutableData.Utilities
 {
@@ -13,16 +12,16 @@ namespace ImmutableData.Utilities
             switch (stepType)
             {
                 case StepType.Linear:
-                    steps = GenerateLinearSteps(stepCount, Mathf.FloorToInt(min), Mathf.FloorToInt(max));
+                    steps = GenerateLinearSteps(stepCount, (int)Math.Floor(min), (int)Math.Floor(max));
                     break;
                 case StepType.Logarithmic:
-                    steps = GenerateLogarithmicSteps(stepCount, Mathf.FloorToInt(min), Mathf.FloorToInt(max));
+                    steps = GenerateLogarithmicSteps(stepCount, (int)Math.Floor(min), (int)Math.Floor(max));
                     break;
                 case StepType.Exponential:
-                    steps = GenerateExponentialSteps(stepCount, Mathf.FloorToInt(min), Mathf.FloorToInt(max));
+                    steps = GenerateExponentialSteps(stepCount, (int)Math.Floor(min), (int)Math.Floor(max));
                     break;
                 case StepType.Multiplier:
-                    steps = GenerateMultiplierSteps(stepCount, Mathf.FloorToInt(min), max);
+                    steps = GenerateMultiplierSteps(stepCount, (int)Math.Floor(min), max);
                     break;
             }
         
@@ -78,7 +77,7 @@ namespace ImmutableData.Utilities
             for (var i = 0; i < stepCount; i++)
             {
                 steps[i] = current;
-                current = Mathf.FloorToInt(current * multiplier);
+                current = (int)Math.Floor(current * multiplier);
             }
 
             return steps;

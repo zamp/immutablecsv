@@ -1,9 +1,7 @@
 {
     "name": "immutablecsv",
     "rootNamespace": "",
-    "references": [
-        "GUID:8ace1ff05998cce4192ef21d3052871b"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,

@@ -1,155 +1,246 @@
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace ImmutableData
 {
-    public class ImmutableDatabase
-    {
-        private readonly Dictionary<string, Immutable> _database = new();
+	public class ImmutableDatabase
+	{
+		private const int MaxAliasDepth = 64;
 
-        private string GetIdentifier(Type type, string name)
-        {
-            if (type == null)
-                throw new ArgumentNullException($"Type is null");
+		private readonly Dictionary<string, Immutable> _database = new();
+		private readonly Dictionary<string, Immutable> _retired = new();
+		private readonly Dictionary<string, string> _aliases = new();
+		private readonly List<string> _warnings = new();
 
-            type = GetRootBaseType(type);
+		/// <summary>Non-fatal import notes, such as retired references that were dropped.</summary>
+		public IReadOnlyList<string> Warnings => _warnings;
 
-            return $"{type.Name}{name}";
-        }
+		/// <summary>Number of active (non-retired) immutables.</summary>
+		public int Count => _database.Count;
 
-        private static Type GetRootBaseType(Type type)
-        {
-            var current = type;
+		internal static string GetIdentifier(Type type, string? name)
+		{
+			if (type == null)
+				throw new ArgumentNullException(nameof(type));
 
-            while (current.BaseType != null && current.BaseType != typeof(object) && current.BaseType != typeof(Immutable))
-                current = current.BaseType;
+			type = GetRootBaseType(type);
 
-            // If the resolved root is marked with [NotImmutableRoot], skip past it
-            // and use the original concrete type as the root instead.
-            if (current.IsDefined(typeof(NotImmutableRoot), false))
-            {
-                current = type;
-            }
+			return $"{type.Name}/{name}";
+		}
 
-            return current;
-        }
+		/// <summary>The type whose name namespaces <paramref name="type"/>'s names: the class just below <see cref="Immutable"/>.</summary>
+		public static Type GetRootBaseType(Type type)
+		{
+			var current = type;
 
-        /// <summary>
-        /// Add a single model to the database
-        /// </summary>
-        /// <param name="immutable"></param>
-        /// <typeparam name="T"></typeparam>
-        /// <exception cref="Exception"></exception>
-        internal void Add<T>(T immutable) where T : Immutable
-        {
-            Add(immutable.GetType(), immutable);
-        }
+			while (current.BaseType != null && current.BaseType != typeof(object) && current.BaseType != typeof(Immutable))
+				current = current.BaseType;
 
-        private void Add(Type type, Immutable immutable)
-        {
-            if (!_database.TryAdd(GetIdentifier(type, immutable.Name), immutable))
-                throw new Exception($"Immutable with name {immutable.Name} already exists.");
-        }
+			// If the resolved root is marked with [NotImmutableRoot], skip past it
+			// and use the original concrete type as the root instead.
+			if (current.IsDefined(typeof(NotImmutableRoot), false))
+			{
+				current = type;
+			}
 
-        /// <summary>
-        /// Gets immutable based on the name
-        /// </summary>
-        /// <param name="name"></param>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public T Get<T>(string name = "") where T : Immutable
-        {
-            return (T)Get(typeof(T), name);
-        }
+			return current;
+		}
 
-        /// <summary>
-        /// Gets immutable based on name
-        /// </summary>
-        /// <param name="type"></param>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public Immutable Get(Type type, string name)
-        {
-            if (_database.TryGetValue(GetIdentifier(type,name), out var immutable))
-                return immutable;
-            throw new Exception($"No immutable with name {name} of type {type.Name} exists.");
-        }
+		/// <summary>
+		/// Add a single model to the database
+		/// </summary>
+		internal void Add<T>(T immutable) where T : Immutable
+		{
+			var key = GetIdentifier(immutable.GetType(), immutable.Name);
+			var target = immutable.IsRetired ? _retired : _database;
 
-        /// <summary>
-        /// Checks if immutable exists
-        /// </summary>
-        /// <param name="name"></param>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public bool Exists<T>(string name) where T : Immutable
-        {
-            return Exists(typeof(T), name);
-        }
+			if (!target.TryAdd(key, immutable))
+				throw new Exception($"Immutable with name {immutable.Name} already exists.");
+		}
 
-        /// <summary>
-        /// Checks if immutable exists
-        /// </summary>
-        /// <param name="type"></param>
-        /// <param name="name"></param>
-        /// <returns></returns>
-        public bool Exists(Type type, string name)
-        {
-            return _database.ContainsKey(GetIdentifier(type, name));
-        }
+		internal void AddAlias(Type type, string oldName, string newName)
+		{
+			var key = GetIdentifier(type, oldName);
 
-        /// <summary>
-        /// Gets immutables of type
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <returns></returns>
-        public IEnumerable<T> GetAll<T>() where T : Immutable
-        {
-            return _database.Values.OfType<T>();
-        }
+			if (!_aliases.TryAdd(key, newName))
+				throw new Exception($"{type.Name} {oldName} is replaced twice in the recycle bin.");
+		}
 
-        public bool Validate(Result result)
-        {
-            foreach (var immutable in _database)
-            {
-                if (!immutable.Value.Validate(result))
-                {
-	                ImmutableImporter.Breadcrumbs.Add($"Immutable name: {immutable.Value.Name}. Type: {immutable.Value.GetType().Name}");
-                    return false;
-                }
-            }
+		internal void AddWarning(string warning)
+		{
+			_warnings.Add(warning);
+		}
 
-            return true;
-        }
+		/// <summary>
+		/// Gets immutable based on the name. Follows recycle-bin renames and finds retired immutables.
+		/// </summary>
+		public T Get<T>(string name = "") where T : Immutable
+		{
+			return (T)Get(typeof(T), name);
+		}
 
-        public void PrePostImport()
-        {
-            foreach (var immutable in _database)
-                immutable.Value.PrePostImport(this);
-        }
+		/// <summary>
+		/// Gets immutable based on name. Follows recycle-bin renames and finds retired immutables.
+		/// </summary>
+		public Immutable Get(Type type, string name)
+		{
+			if (TryGet(type, name, out var immutable))
+				return immutable!;
 
-        public void PostImport()
-        {
-            foreach (var immutable in _database)
-                immutable.Value.PostImport(this);
-        }
+			throw new Exception($"No immutable with name {name} of type {type.Name} exists.");
+		}
 
-        public void PostImport<T>(T gameState)
-        {
-            foreach (var immutable in _database)
-                immutable.Value.PostImport(this, gameState);
-        }
+		public bool TryGet<T>(string name, out T? data) where T : Immutable
+		{
+			if (TryGet(typeof(T), name, out var immutable) && immutable is T typed)
+			{
+				data = typed;
+				return true;
+			}
 
-        public bool TryGet<T>(string name, out T data) where T : Immutable
-        {
-            if (string.IsNullOrEmpty(name))
-            {
-                data = null;
-                return false;
-            }
+			data = null;
+			return false;
+		}
 
-            data = Get<T>(name);
-            return data != null;
-        }
-    }
+		public bool TryGet(Type type, string name, out Immutable? immutable)
+		{
+			var current = name;
+
+			for (var depth = 0; depth < MaxAliasDepth; ++depth)
+			{
+				var key = GetIdentifier(type, current);
+
+				if (_database.TryGetValue(key, out immutable) && type.IsInstanceOfType(immutable))
+					return true;
+
+				if (_retired.TryGetValue(key, out immutable) && type.IsInstanceOfType(immutable))
+					return true;
+
+				if (!_aliases.TryGetValue(key, out var replacement))
+					break;
+
+				current = replacement;
+			}
+
+			immutable = null;
+			return false;
+		}
+
+		/// <summary>
+		/// Checks if immutable exists, including retired ones and recycle-bin renames.
+		/// </summary>
+		public bool Exists<T>(string name) where T : Immutable
+		{
+			return Exists(typeof(T), name);
+		}
+
+		/// <summary>
+		/// Checks if immutable exists, including retired ones and recycle-bin renames.
+		/// </summary>
+		public bool Exists(Type type, string name)
+		{
+			return TryGet(type, name, out _);
+		}
+
+		/// <summary>True when the name is an active immutable (not retired, not a rename).</summary>
+		public bool IsActive(Type type, string name)
+		{
+			return _database.TryGetValue(GetIdentifier(type, name), out var immutable) && type.IsInstanceOfType(immutable);
+		}
+
+		/// <summary>
+		/// Gets active immutables of type. Retired immutables are never included.
+		/// </summary>
+		public IEnumerable<T> GetAll<T>() where T : Immutable
+		{
+			return _database.Values.OfType<T>();
+		}
+
+		/// <summary>Retired immutables of type, from recycle bins.</summary>
+		public IEnumerable<T> GetRetired<T>() where T : Immutable
+		{
+			return _retired.Values.OfType<T>();
+		}
+
+		/// <summary>Validates every active immutable and collects all errors, each prefixed with the immutable.</summary>
+		public bool Validate(Result result)
+		{
+			foreach (var immutable in _database.Values)
+			{
+				var before = result.Errors.Count;
+				immutable.Validate(result);
+				result.PrefixErrors(before, $"{immutable}: ");
+			}
+
+			return result.IsSuccess;
+		}
+
+		/// <summary>Checks the recycle bin: no name both active and retired, renames point somewhere and do not loop.</summary>
+		internal void ValidateRecycleBin(Result result)
+		{
+			foreach (var key in _retired.Keys)
+			{
+				if (_database.ContainsKey(key))
+					result.AddError($"{_retired[key]} is both active and in the recycle bin.");
+			}
+
+			foreach (var alias in _aliases)
+			{
+				if (_database.ContainsKey(alias.Key) || _retired.ContainsKey(alias.Key))
+					result.AddError($"{alias.Key} is replaced by {alias.Value} in the recycle bin but still exists.");
+
+				var typeName = alias.Key.Substring(0, alias.Key.IndexOf('/'));
+				var visited = new HashSet<string> { alias.Key };
+				var current = alias.Value;
+
+				while (true)
+				{
+					var key = $"{typeName}/{current}";
+
+					if (_database.ContainsKey(key) || _retired.ContainsKey(key))
+						break;
+
+					if (!_aliases.TryGetValue(key, out var next))
+					{
+						result.AddError($"{alias.Key} is replaced by {alias.Value}, which does not exist.");
+						break;
+					}
+
+					if (!visited.Add(key))
+					{
+						result.AddError($"{alias.Key} is part of a ReplacedBy loop.");
+						break;
+					}
+
+					current = next;
+				}
+			}
+		}
+
+		public void PrePostImport()
+		{
+			foreach (var immutable in AllLoaded())
+				immutable.PrePostImport(this);
+		}
+
+		public void PostImport()
+		{
+			foreach (var immutable in AllLoaded())
+				immutable.PostImport(this);
+		}
+
+		public void PostImport<T>(T gameState)
+		{
+			foreach (var immutable in AllLoaded())
+				immutable.PostImport(this, gameState);
+		}
+
+		private IEnumerable<Immutable> AllLoaded()
+		{
+			return _database.Values.Concat(_retired.Values).ToList();
+		}
+	}
 }

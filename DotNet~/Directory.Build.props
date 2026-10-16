@@ -1,0 +1,6 @@
+<Project>
+	<!-- Stops a host repository's Directory.Build.props (when used as a submodule) from changing how this library builds. -->
+	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
+	</PropertyGroup>
+</Project>

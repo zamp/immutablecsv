@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<!--
+		Plain .NET build of immutablecsv, with no engine dependencies. It lives in a folder ending in "~" so Unity
+		ignores it (and its bin/obj) when the repository sits inside a Unity project's Assets.
+	-->
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<RootNamespace>ImmutableData</RootNamespace>
+		<AssemblyName>ImmutableData</AssemblyName>
+		<Nullable>annotations</Nullable>
+		<EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+		<NoWarn>$(NoWarn);CS8632</NoWarn>
+	</PropertyGroup>
+	<ItemGroup>
+		<Compile Include="../ImmutableData/**/*.cs" />
+		<!-- Needs Newtonsoft.Json; Unity projects compile it, the plain build leaves it out. -->
+		<Compile Remove="../ImmutableData/ImmutableJsonConverter.cs" />
+		<InternalsVisibleTo Include="ImmutableData.Tests" />
+	</ItemGroup>
+</Project>

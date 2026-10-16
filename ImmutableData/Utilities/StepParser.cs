@@ -1,6 +1,6 @@
 using System;
+using System.Globalization;
 using System.Text.RegularExpressions;
-using UnityEngine;
 
 namespace ImmutableData.Utilities
 {
@@ -38,9 +38,9 @@ namespace ImmutableData.Utilities
             
             try
             {
-                steps = int.Parse(arguments[0]);
-                min = float.Parse(arguments[1]);
-                max = float.Parse(arguments[2]);
+                steps = int.Parse(arguments[0], CultureInfo.InvariantCulture);
+                min = float.Parse(arguments[1], CultureInfo.InvariantCulture);
+                max = float.Parse(arguments[2], CultureInfo.InvariantCulture);
             }
             catch (Exception e)
             {

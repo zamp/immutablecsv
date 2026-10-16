@@ -4,7 +4,7 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using Mono.Reflection;
+using ImmutableData.Extensions;
 
 namespace ImmutableData.Deserializers
 {
@@ -14,8 +14,27 @@ namespace ImmutableData.Deserializers
         
         public bool CanDeserialize(Type type)
         {
-            return type.GetCustomAttribute<OrderedAttribute>() != null;
+            if (type.GetCustomAttribute<OrderedAttribute>() != null)
+                return true;
+
+            // An abstract base (or interface) works too when some [Ordered] type implements it; the cell then names
+            // the concrete type, as in "Above:100".
+            if (!type.IsAbstract || typeof(Immutable).IsAssignableFrom(type))
+                return false;
+
+            lock (PolymorphicBases)
+            {
+                if (!PolymorphicBases.TryGetValue(type, out var isBase))
+                {
+                    isBase = type.Assembly.GetTypes().Any(x => !x.IsAbstract && type.IsAssignableFrom(x) && x.GetCustomAttribute<OrderedAttribute>() != null);
+                    PolymorphicBases[type] = isBase;
+                }
+
+                return isBase;
+            }
         }
+
+        private static readonly Dictionary<Type, bool> PolymorphicBases = new();
 
         public bool Deserialize(Type type, string data, out object deserializedObject)
         {
@@ -50,7 +69,15 @@ namespace ImmutableData.Deserializers
             }
             else
             {
-                data = parts.Length > 1 ? parts[1] : parts[0];
+                // Everything after the type name is the value; a bare type name ("Idle") means all defaults.
+                var separator = originalData.IndexOf(ImmutableImporter.TypeDelimiter);
+                data = separator < 0 ? "" : originalData.Substring(separator + 1);
+
+                if (data.Length == 0)
+                {
+                    deserializedObject = Activator.CreateInstance(classType);
+                    return true;
+                }
             }
 
             var orderedProperties = classType.GetProperties()
@@ -89,7 +116,12 @@ namespace ImmutableData.Deserializers
                     continue;
                 }
 
-                if (split[i].StartsWith(ImmutableImporter.ArrayStart))
+                if (split[i].StartsWith(ImmutableImporter.ArrayStart) && split[i].EndsWith(ImmutableImporter.ArrayEnd))
+                {
+                    // A bracketed block without inner delimiters, such as [Type:value].
+                    splitData.Add(split[i].Substring(1, split[i].Length - 2));
+                }
+                else if (split[i].StartsWith(ImmutableImporter.ArrayStart))
                 {
                     blockStart = i;
                     readingBlock = true;

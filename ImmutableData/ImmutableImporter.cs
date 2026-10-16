@@ -1,20 +1,30 @@
+#nullable disable
+
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using ImmutableData.Csv;
 using ImmutableData.Deserializers;
 using ImmutableData.Extensions;
 using ImmutableData.Utilities;
-using LiteCsvParser;
-using Mono.Reflection;
 
 namespace ImmutableData
 {
 	public class ImmutableImporterLog
 	{
+	}
+
+	/// <summary>An import failure that names where in the data it happened.</summary>
+	public class ImmutableImportException : Exception
+	{
+		public ImmutableImportException(string message, Exception inner = null) : base(message, inner)
+		{
+		}
 	}
 
 	public static class ImmutableImporter
@@ -31,7 +41,7 @@ namespace ImmutableData
 		public const string ClassHeader = "Class";
 		public const string KeyHeader = "Key";
 		public const string ValueHeader = "Value";
-		private const int MaxResolveIterations = 1000;
+		private const int MaxBreadcrumbs = 100;
 
 		public class ImmutableValidationException : Exception
 		{
@@ -44,142 +54,251 @@ namespace ImmutableData
 		{
 			public Immutable Immutable;
 			public List<Unresolved> Unresolved;
-			public string SourceFile;
+			public ImmutableRow Row;
+			public bool Added;
+			public string SourceFile => Row.Source;
 		}
 
 		private abstract class Unresolved
 		{
 			public Immutable Immutable;
 			public abstract string Name { get; }
+			public abstract Type MemberType { get; }
+			public string Header;
 			public string Value;
 		}
 
 		private class UnresolvedField : Unresolved
 		{
 			public override string Name => FieldInfo.Name;
+			public override Type MemberType => FieldInfo.FieldType;
 			public FieldInfo FieldInfo;
 		}
 
 		private class UnresolvedProperty : Unresolved
 		{
 			public override string Name => PropertyInfo.Name;
+			public override Type MemberType => PropertyInfo.PropertyType;
 			public PropertyInfo PropertyInfo;
 		}
 
 		public static readonly List<string> Breadcrumbs = new();
 		private static readonly List<IImmutableDeserializer> Deserializers = new();
 
+		/// <summary>Imports CSV files. Every file is active data; use <see cref="Import(IEnumerable{ImmutableRow})"/> for recycle bins.</summary>
 		public static ImmutableDatabase Import(string[] files)
 		{
-			files = files.Distinct().ToArray();
+			var rows = new List<ImmutableRow>();
 
+			foreach (var file in files.Distinct())
+			{
+				AddBreadcrumb($"Importing file {file}");
+				rows.AddRange(CsvRowReader.ReadFile(file));
+			}
+
+			return Import(rows);
+		}
+
+		/// <summary>
+		/// Imports rows read with <see cref="CsvRowReader"/> (possibly merged or filtered by the host). Recycle-bin rows
+		/// load as retired immutables, or as renames when they have a <see cref="ImmutableRow.ReplacedBy"/>.
+		/// </summary>
+		public static ImmutableDatabase Import(IEnumerable<ImmutableRow> rows)
+		{
+			Breadcrumbs.Clear();
 			Deserializers.Clear();
 			foreach (var provider in DeserializerProvider.Providers)
 			{
 				Deserializers.AddRange(provider.Deserializers);
 			}
-			
+
+			var db = new ImmutableDatabase();
+
 			try
 			{
-				return ResolveModels(GetUnresolvedModelsFromFiles(files).ToList());
-			}
-			catch (Exception e)
-			{
-				var error = new StringBuilder();
-				error.AppendLine("Last 10 breadcrumbs:");
-				var count = Math.Min(10, Breadcrumbs.Count);
-				for (var i = Breadcrumbs.Count - 1; i > Breadcrumbs.Count - count; --i)
+				var types = GetTypes();
+				var models = new List<UnresolvedModel>();
+
+				foreach (var row in rows)
 				{
-					error.AppendLine(Breadcrumbs[i]);
+					if (row.Retired && row.ReplacedBy != null)
+					{
+						AddAlias(db, types, row);
+						continue;
+					}
+
+					models.Add(ParseRow(types, row));
 				}
 
-				throw new Exception(error.ToString(), e);
+				return ResolveModels(models, db);
+			}
+			finally
+			{
+				ImmutableDeserializer.ImmutableDatabase = null;
 			}
 		}
 
-		private static ImmutableDatabase ResolveModels(List<UnresolvedModel> unresolvedModels)
+		private static void AddAlias(ImmutableDatabase db, List<Type> types, ImmutableRow row)
 		{
-			var db = new ImmutableDatabase();
+			var type = FindImmutableType(types, row);
 
+			if (string.IsNullOrEmpty(row.Name))
+				throw new ImmutableImportException($"{row.Location}: recycle-bin row with {ImmutableRow.ReplacedByHeader} has no Name.");
+
+			try
+			{
+				db.AddAlias(type, row.Name, row.ReplacedBy);
+			}
+			catch (Exception e)
+			{
+				throw new ImmutableImportException($"{row.Location}: {e.Message}", e);
+			}
+		}
+
+		/// <summary>
+		/// Parses one cell value outside an import, such as a requirement list written in a script, resolving references
+		/// against an already loaded database. Throws when the value cannot be read.
+		/// </summary>
+		public static T Deserialize<T>(string data, ImmutableDatabase database)
+		{
+			return (T)Deserialize(typeof(T), data, database);
+		}
+
+		public static object Deserialize(Type type, string data, ImmutableDatabase database)
+		{
+			Deserializers.Clear();
+			foreach (var provider in DeserializerProvider.Providers)
+				Deserializers.AddRange(provider.Deserializers);
+
+			var previous = ImmutableDeserializer.ImmutableDatabase;
+			ImmutableDeserializer.ImmutableDatabase = database;
+
+			try
+			{
+				if (TryDeserialize(type, data ?? "", out var value))
+					return value;
+			}
+			catch (Exception e)
+			{
+				throw new ImmutableImportException($"'{data}' could not be read as {FriendlyName(type)}: {e.Message}", e);
+			}
+			finally
+			{
+				ImmutableDeserializer.ImmutableDatabase = previous;
+			}
+
+			throw new ImmutableImportException($"'{data}' could not be read as {FriendlyName(type)}.");
+		}
+
+		internal static void AddBreadcrumb(string breadcrumb)
+		{
+			Breadcrumbs.Add(breadcrumb);
+
+			if (Breadcrumbs.Count > MaxBreadcrumbs)
+				Breadcrumbs.RemoveAt(0);
+		}
+
+		private static ImmutableDatabase ResolveModels(List<UnresolvedModel> unresolvedModels, ImmutableDatabase db)
+		{
 			CheckNameConflicts(unresolvedModels);
 
 			ImmutableDeserializer.ImmutableDatabase = db;
 
-			// start resolving models
-			var unresolvedQueue = new Queue<UnresolvedModel>(unresolvedModels);
+			// Resolve in passes until nothing is left. References can point at rows that resolve later, so a pass
+			// that makes no progress at all means the rest can never resolve.
+			var pending = unresolvedModels;
 
-			var iterations = 0;
-			while (unresolvedQueue.Count > 0)
+			while (pending.Count > 0)
 			{
-				// try to resolve model
-				var toResolve = unresolvedQueue.Dequeue();
+				var progress = false;
 
-				ResolveUnresolvedModel(toResolve, db);
-
-				if (!IsResolved(toResolve))
-					unresolvedQueue.Enqueue(toResolve);
-
-				iterations++;
-				if (iterations > MaxResolveIterations)
+				foreach (var model in pending)
 				{
-					var error = new StringBuilder();
-					error.AppendLine("Ran out of resolve steps.");
-					error.AppendLine($"Models left to resolve:");
-
-					foreach (var unresolvedModel in unresolvedQueue)
-					{
-						if (unresolvedModel.Unresolved.Count == 0)
-							continue;
-
-						error.AppendLine($"{unresolvedModel.Immutable.Name}");
-						foreach (var unresolved in unresolvedModel.Unresolved)
-						{
-							error.AppendLine($"\t{unresolved.Name}:{unresolved.Value}");
-						}
-					}
-
-					// append last 10 breadcrumbs
-					error.AppendLine("Last 10 breadcrumbs:");
-					var count = Math.Min(10, Breadcrumbs.Count);
-					for (var i = Breadcrumbs.Count - count; i < Breadcrumbs.Count; ++i)
-					{
-						error.AppendLine(Breadcrumbs[i]);
-					}
-
-					// left here for debugging
-					ResolveUnresolvedModel(toResolve, db);
-
-					throw new RanOutOfResolveStepsException(error.ToString());
+					if (ResolveUnresolvedModel(model, db))
+						progress = true;
 				}
+
+				pending = pending.Where(x => !IsResolved(x)).ToList();
+
+				if (pending.Count == 0 || progress)
+					continue;
+
+				// Retired rows may point at data that is gone for good; they keep defaults for those members.
+				var retired = pending.Where(x => x.Immutable.IsRetired).ToList();
+				if (retired.Count > 0)
+				{
+					foreach (var model in retired)
+					{
+						foreach (var unresolved in model.Unresolved)
+							db.AddWarning($"{model.Row.Location}: retired {model.Immutable} keeps the default {unresolved.Name}; {Describe(unresolved)}.");
+
+						model.Unresolved.Clear();
+					}
+
+					pending = pending.Where(x => !IsResolved(x)).ToList();
+					continue;
+				}
+
+				var error = new StringBuilder();
+				error.AppendLine("Could not resolve these values:");
+
+				foreach (var model in pending)
+				{
+					foreach (var unresolved in model.Unresolved)
+						error.AppendLine($"{model.Row.Location}: {model.Immutable}, column {unresolved.Header}: {Describe(unresolved)}");
+				}
+
+				throw new RanOutOfResolveStepsException(error.ToString().TrimEnd());
 			}
 
 			ImmutableDeserializer.ImmutableDatabase = null;
 
 			var result = new Result();
 
+			db.ValidateRecycleBin(result);
+
 			db.PrePostImport();
 			db.PostImport();
 
-			if (!db.Validate(result))
-				throw new ImmutableValidationException(result.GetError());
+			db.Validate(result);
+
+			if (!result.IsSuccess)
+				throw new ImmutableValidationException(result.GetErrors());
 
 			return db;
 		}
 
+		private static string Describe(Unresolved unresolved)
+		{
+			var type = Nullable.GetUnderlyingType(unresolved.MemberType) ?? unresolved.MemberType;
+
+			if (typeof(Immutable).IsAssignableFrom(type))
+				return $"no {type.Name} named '{unresolved.Value}'";
+
+			return $"'{unresolved.Value}' could not be read as {FriendlyName(type)}";
+		}
+
+		private static string FriendlyName(Type type)
+		{
+			if (!type.IsGenericType)
+				return type.Name;
+
+			var name = type.Name.Substring(0, type.Name.IndexOf('`'));
+			return $"{name}<{string.Join(", ", type.GetGenericArguments().Select(FriendlyName))}>";
+		}
+
 		private static void CheckNameConflicts(List<UnresolvedModel> unresolvedModels)
 		{
-			foreach (var a in unresolvedModels)
-			{
-				var aName = a.Unresolved.FirstOrDefault(x => x.Name == "Name")?.Value ?? "";
-				foreach (var b in unresolvedModels)
-				{
-					if (ReferenceEquals(a, b))
-						continue;
+			var seen = new Dictionary<string, UnresolvedModel>();
 
-					var bName = b.Unresolved.FirstOrDefault(x => x.Name == "Name")?.Value ?? "";
-					if (a.Immutable.GetType() == b.Immutable.GetType() && aName == bName)
-						throw new Exception($"Name conflict! {aName}=={bName} ({a.SourceFile}, {b.SourceFile}");
-				}
+			foreach (var model in unresolvedModels)
+			{
+				var key = $"{model.Immutable.IsRetired}/{ImmutableDatabase.GetIdentifier(model.Immutable.GetType(), model.Row.GetCell(nameof(Immutable.Name))?.Trim())}";
+
+				if (seen.TryGetValue(key, out var other))
+					throw new ImmutableImportException($"Name conflict: {model.Row.Class} '{model.Row.Name}' is defined at {other.Row.Location} and {model.Row.Location}.");
+
+				seen.Add(key, model);
 			}
 		}
 
@@ -188,20 +307,31 @@ namespace ImmutableData
 			return toResolve.Unresolved.Count == 0;
 		}
 
-		private static void ResolveUnresolvedModel(UnresolvedModel toResolve, ImmutableDatabase db)
+		/// <summary>Tries every pending member once. Returns true if any member resolved.</summary>
+		private static bool ResolveUnresolvedModel(UnresolvedModel toResolve, ImmutableDatabase db)
 		{
+			var progress = false;
 			var properties = toResolve.Unresolved.ToList();
 			foreach (var property in properties)
 			{
-				if (Resolve(toResolve.Immutable, property))
+				if (Resolve(toResolve, property))
+				{
 					toResolve.Unresolved.Remove(property);
+					progress = true;
+				}
 			}
 
-			if (!db.Exists(toResolve.Immutable.GetType(), toResolve.Immutable.Name))
+			if (!toResolve.Added)
+			{
 				db.Add(toResolve.Immutable);
+				toResolve.Added = true;
+				progress = true;
+			}
+
+			return progress;
 		}
 
-		private static bool Resolve(Immutable immutable, Unresolved unresolved)
+		private static bool Resolve(UnresolvedModel model, Unresolved unresolved)
 		{
 			try
 			{
@@ -211,7 +341,6 @@ namespace ImmutableData
 
 					if (TryDeserialize(propertyInfo, unresolved.Value, out var value))
 					{
-						// TODO: if init only ever becomes a thing in unity, this can be removed
 						if (propertyInfo.SetMethod == null)
 						{
 							propertyInfo.GetBackingField().SetValue(unresolved.Immutable, value);
@@ -231,19 +360,17 @@ namespace ImmutableData
 
 					if (TryDeserialize(fieldInfo, unresolved.Value, out var value))
 					{
-						fieldInfo.SetValue(immutable, value);
+						fieldInfo.SetValue(model.Immutable, value);
 						return true;
 					}
 				}
 
 				return false;
 			}
-			catch (Exception e)
+			catch (Exception e) when (e is not ImmutableImportException)
 			{
-#if UNITY_EDITOR
-				UnityEngine.Debug.LogError($"{e.Message}\n{immutable.Name}/{immutable.GetType()} : {unresolved.Name}={unresolved.Value}");
-#endif
-				throw;
+				var reason = e.InnerException != null ? $"{e.Message} ({e.InnerException.Message})" : e.Message;
+				throw new ImmutableImportException($"{model.Row.Location}: {model.Immutable.GetType().Name} '{model.Row.Name}', column {unresolved.Header} = '{unresolved.Value}': {reason}", e);
 			}
 		}
 
@@ -294,130 +421,69 @@ namespace ImmutableData
 
 			if (deserializer.Deserialize(type, data, out value))
 			{
-				Breadcrumbs.Add($"Deserialized with {deserializer.GetType().Name}");
+				AddBreadcrumb($"Deserialized with {deserializer.GetType().Name}");
 				return true;
 			}
 
 			return false;
 		}
 
-		private static IEnumerable<UnresolvedModel> GetUnresolvedModelsFromFiles(IEnumerable<string> files)
+		private static Type FindImmutableType(List<Type> types, ImmutableRow row)
 		{
-			// get all unresolved models from files
-			var types = GetTypes();
-			
-			foreach (var file in files)
-			{
-				Breadcrumbs.Add($"Importing file {file}");
-				foreach (var unresolved in GetUnresolvedModelsFromFile(types, file))
-				{
-					yield return unresolved;
-				}
-			}
-		}
-
-		private static IEnumerable<UnresolvedModel> GetUnresolvedModelsFromFile(List<Type> types, string path)
-		{
-			using var reader = new CsvFileReader(path, EmptyLineBehavior.Ignore);
-
-			var row = new List<string>();
-			Dictionary<string, int> headers = null;
-
-			// read headers first
-			if (!reader.ReadRow(row))
-				throw new Exception("No data in csv.");
-
-			headers = new Dictionary<string, int>(row.Count);
-			for (var i = 0; i < row.Count; ++i)
-			{
-				headers.Add(row[i], i);
-			}
-
-			var isKeyValuePairs = headers.Count == 2 && headers.ContainsKey(KeyHeader) && headers.ContainsKey(ValueHeader);
-
-			if (isKeyValuePairs)
-			{
-				// since csv data is in kvpairs (column 0 = key, column 1 = value) we need a special way
-				// to read data out where we read both keys and values and put them in headers and one row
-				headers.Clear();
-				var values = new List<string>();
-				var n = 0;
-				while (reader.ReadRow(row))
-				{
-					headers.Add(row[0], n);
-					values.Add(row[1]);
-					n++;
-				}
-
-				row.Clear();
-				row.AddRange(values);
-
-				if (!headers.ContainsKey(ClassHeader))
-				{
-					throw new InvalidDataException($"CSV {path} does not contain class header.");
-				}
-
-				yield return ParseRow(path, types, headers, row);
-				yield break; // do not parse file normally
-			}
-
-			if (!headers.ContainsKey(ClassHeader))
-			{
-				throw new InvalidDataException($"CSV {path} does not contain class header.");
-			}
-
-			while (reader.ReadRow(row))
-			{
-				yield return ParseRow(path, types, headers, row);
-			}
-		}
-
-		private static UnresolvedModel ParseRow(string path, List<Type> types, Dictionary<string, int> headers, List<string> row)
-		{
-			// read class out first so we know what class to create
-			var type = types.FirstOrDefault(x => x.Name == row[headers[ClassHeader]]);
+			var className = row.Class.Trim();
+			var type = types.FirstOrDefault(x => x.Name == className);
 
 			if (type == null)
-			{
-				throw new InvalidDataException($"{path} {row[headers[ClassHeader]]} not found in assembly.");
-			}
+				throw new ImmutableImportException($"{row.Location}: class '{className}' not found.");
 
 			if (!typeof(Immutable).IsAssignableFrom(type))
-			{
-				throw new InvalidDataException($"{path} {type} is not {nameof(Immutable)}.");
-			}
+				throw new ImmutableImportException($"{row.Location}: {type} is not {nameof(Immutable)}.");
+
+			return type;
+		}
+
+		private static UnresolvedModel ParseRow(List<Type> types, ImmutableRow row)
+		{
+			// read class out first so we know what class to create
+			var type = FindImmutableType(types, row);
 
 			var immutable = (Immutable)Activator.CreateInstance(type);
+
+			if (row.Retired)
+			{
+				immutable.IsRetired = true;
+				immutable.RemovedIn = row.RemovedIn;
+			}
 
 			var unresolvedModel = new UnresolvedModel
 			{
 				Immutable = immutable,
 				Unresolved = new List<Unresolved>(),
-				SourceFile = path
+				Row = row
 			};
 
 			// Build a cache for aggregate groups (so multiple headers like Xyz(Foo), Xyz(Bar) combine into one)
 			var compoundGroups = new Dictionary<string, List<(string subKey, string value)>>();
 
 			// read model data based on headers
-			foreach (var header in headers.Where(x => x.Key != ClassHeader))
+			foreach (var cell in row.Cells.Where(x => x.Key != ClassHeader))
 			{
-				if (string.IsNullOrEmpty(header.Key))
+				var header = cell.Key;
+
+				if (string.IsNullOrEmpty(header))
 				{
-					throw new InvalidDataException($"{path} {type} has an empty header. This is not supported.");
+					throw new ImmutableImportException($"{row.Location}: {type.Name} has an empty header. This is not supported.");
 				}
 
 				if (IsCompoundHeader(header))
 				{
-					var key = header.Key;
-					var openParen = key.IndexOf('(');
-					var closeParen = key.LastIndexOf(')');
+					var openParen = header.IndexOf('(');
+					var closeParen = header.LastIndexOf(')');
 
-					var baseName = key.Substring(0, openParen);
-					var innerName = key.Substring(openParen + 1, closeParen - openParen - 1);
+					var baseName = header.Substring(0, openParen);
+					var innerName = header.Substring(openParen + 1, closeParen - openParen - 1);
 
-					var value = row[header.Value];
-					if (string.IsNullOrEmpty(value))
+					if (string.IsNullOrEmpty(cell.Value))
 						continue;
 
 					if (!compoundGroups.TryGetValue(baseName, out var list))
@@ -426,76 +492,61 @@ namespace ImmutableData
 						compoundGroups[baseName] = list;
 					}
 
-					list.Add((innerName, value));
+					list.Add((innerName, cell.Value));
 					continue;
 				}
 
-				var propertyInfo = type.GetProperty(header.Key, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				if (propertyInfo != null)
-				{
-					unresolvedModel.Unresolved.Add(new UnresolvedProperty
-					{
-						Immutable = immutable,
-						PropertyInfo = propertyInfo,
-						Value = row[header.Value]
-					});
-					continue;
-				}
-
-				var fieldInfo = type.GetField(header.Key, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				if (fieldInfo != null)
-				{
-					unresolvedModel.Unresolved.Add(new UnresolvedField
-					{
-						Immutable = immutable,
-						FieldInfo = fieldInfo,
-						Value = row[header.Value]
-					});
-					continue;
-				}
-
-				throw new InvalidDataException($"{path} {type} does not contain field {header.Key}");
+				if (!TryAddMember(unresolvedModel, type, header, header, cell.Value))
+					throw new ImmutableImportException($"{row.Location}: {type.Name} has no field or property '{header}'.");
 			}
 
 			foreach (var kvp in compoundGroups)
 			{
 				var baseName = kvp.Key;
-				
+
 				var joined = string.Join(ArrayDelimiter, kvp.Value.Select(x => $"{x.subKey}{InlineDelimiter}{x.value}"));
 
-				var fieldInfo = type.GetField(baseName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				if (fieldInfo != null)
-				{
-					unresolvedModel.Unresolved.Add(new UnresolvedField
-					{
-						Immutable = immutable,
-						FieldInfo = fieldInfo,
-						Value = joined
-					});
-					continue;
-				}
-
-				var propertyInfo = type.GetProperty(baseName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-				if (propertyInfo != null)
-				{
-					unresolvedModel.Unresolved.Add(new UnresolvedProperty
-					{
-						Immutable = immutable,
-						PropertyInfo = propertyInfo,
-						Value = joined
-					});
-					continue;
-				}
-
-				throw new InvalidDataException($"{path} {type} does not contain aggregate base field {baseName}");
+				if (!TryAddMember(unresolvedModel, type, baseName, $"{baseName}(...)", joined))
+					throw new ImmutableImportException($"{row.Location}: {type.Name} has no aggregate base field '{baseName}'.");
 			}
 
 			return unresolvedModel;
 		}
 
-		private static bool IsCompoundHeader(KeyValuePair<string, int> header)
+		private static bool TryAddMember(UnresolvedModel model, Type type, string memberName, string header, string value)
 		{
-			return header.Key.Contains("(") && header.Key.EndsWith(")");
+			var propertyInfo = type.GetProperty(memberName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+			if (propertyInfo != null)
+			{
+				model.Unresolved.Add(new UnresolvedProperty
+				{
+					Immutable = model.Immutable,
+					PropertyInfo = propertyInfo,
+					Header = header,
+					Value = value
+				});
+				return true;
+			}
+
+			var fieldInfo = type.GetField(memberName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+			if (fieldInfo != null)
+			{
+				model.Unresolved.Add(new UnresolvedField
+				{
+					Immutable = model.Immutable,
+					FieldInfo = fieldInfo,
+					Header = header,
+					Value = value
+				});
+				return true;
+			}
+
+			return false;
+		}
+
+		private static bool IsCompoundHeader(string header)
+		{
+			return header.Contains("(") && header.EndsWith(")");
 		}
 
 		public static List<Type> GetTypes()
@@ -768,8 +819,8 @@ namespace ImmutableData
 			{
 				var chunks = item.Split(InlineDelimiter);
 
-				if (!double.TryParse(chunks[1], out var weight))
-					throw new Exception($"Could not parse weight value ({chunks[1]}).");
+				if (chunks.Length != 2 || !double.TryParse(chunks[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var weight))
+					throw new Exception($"Could not parse weighted item '{item}'; expected value{InlineDelimiter}weight.");
 
 				if (TryDeserialize(type, chunks[0], out var value))
 					addMethod.Invoke(weightedList, new object[] { value, weight });

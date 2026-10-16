@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmutableData", "ImmutableData.csproj", "{1B12B338-F088-4E93-AC92-E83C6A963DFA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmutableData.Tests", "ImmutableData.Tests\ImmutableData.Tests.csproj", "{A35FBF90-BEA1-43B5-9ACE-52324910FE0C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1B12B338-F088-4E93-AC92-E83C6A963DFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1B12B338-F088-4E93-AC92-E83C6A963DFA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1B12B338-F088-4E93-AC92-E83C6A963DFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1B12B338-F088-4E93-AC92-E83C6A963DFA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A35FBF90-BEA1-43B5-9ACE-52324910FE0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A35FBF90-BEA1-43B5-9ACE-52324910FE0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A35FBF90-BEA1-43B5-9ACE-52324910FE0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A35FBF90-BEA1-43B5-9ACE-52324910FE0C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

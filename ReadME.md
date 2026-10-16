@@ -1,7 +1,7 @@
 # immutablecsv Plugin Documentation
 
 ## 1. Purpose & High‑Level Overview
-`immutablecsv` is a lightweight, reflection‑driven data import system for Unity (will probably work outside of Unity too) that turns a set of CSV data files into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
+`immutablecsv` is a lightweight, reflection‑driven data import system for Unity and plain .NET (no engine dependencies) that turns a set of CSV data files into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
 
 ### Usage:
 CSV:
@@ -74,14 +74,14 @@ Debug.Log(someConfig.ValueProperty); // 4321
 1. Collect CSV file paths (example: call `var files = Directory.GetFiles("MY_CSV_PATH", "*.csv")`).
 2. `ImmutableImporter.Import(files)`
    - Reads each file → produces `UnresolvedModel` (object + list of field/property assignments still in string form).
-   - All models are queued and iteratively resolved. Each pass tries to deserialize pending members; unresolved ones are retried until:
+   - All models are resolved in passes. Each pass tries to deserialize pending members; unresolved ones are retried until:
      - All resolved OR
-     - `MaxResolveIterations` (1000) exceeded → `RanOutOfResolveStepsException` (often circular dependency or bad reference name).
+     - A whole pass makes no progress → `RanOutOfResolveStepsException` listing every unresolved value with its `file:line` and column (usually a typo in a reference name).
 3. Once fully resolved:
    - `PrePostImport()` pass on every immutable (early preprocessing across whole DB).
    - `PostImport()` pass on every immutable (can link to other immutables confidently now).
    - (Optional) `PostImport<T>(gameState)` variant if used later by gameplay systems.
-4. Validation: each immutable's `Validate(Result)` is invoked; any failure throws `ImmutableValidationException` with first error.
+4. Validation: each active immutable's `Validate(Result)` is invoked; if any fail, `ImmutableValidationException` lists every error, each prefixed with `Type:Name`.
 5. Database returned. The static reference used by deserializers (`ImmutableDeserializer.ImmutableDatabase`) is cleared.
 
 ## 4. CSV File Formats
@@ -140,8 +140,8 @@ CompoundExample,Example1,FooIsOne,BarIsNone
 CompoundExample,Example2,FooIsTwo,BarIsThree
 ```
 Essentially what happens is that the field will be aggregated/compounded into one field:
-- In the `Example1` line this becomes: `"Foo;FooIsOne,Bar;BarIsNone"`
-- In the `Example2` line:  `"Foo;FooIsTwo,Bar;BarIsThree"`
+- In the `Example1` line this becomes: `"Foo|FooIsOne,Bar|BarIsNone"`
+- In the `Example2` line:  `"Foo|FooIsTwo,Bar|BarIsThree"`
 
 Your target field/property must know how to parse this aggregated string (custom deserializer or manual `PostImport` processing).
 
@@ -149,9 +149,9 @@ Your target field/property must know how to parse this aggregated string (custom
 For compact positional encoding of nested value objects.
 - Mark a class with `[Ordered]`.
 - Tag each participating field or property with `[Order(n)]` (0-based or any unique int, order sorted by the numeric value).
-- In CSV, encode value as `OptionalNestedTypeName:val0;val1;[blockWith;delimiters];val2...`
+- In CSV, encode value as `OptionalNestedTypeName:val0|val1|[blockWith|delimiters]|val2...`
   - The prefix before the first `:` lets you override which concrete type (by simple `Type.Name`) to instantiate; if omitted the target member type itself is used.
-  - Values are split on `;` unless inside a bracketed block `[ ... ]` which is treated as one token (supports nested list representations inside a single ordered slot).
+  - Values are split on `|` unless inside a bracketed block `[ ... ]` which is treated as one token (supports nested list representations inside a single ordered slot).
   - Nullables: If you have nullable ordered members, all non‑nullable ones must appear first. Once the parser runs out of tokens, any remaining nullable members are skipped. If a non‑nullable appears after a skipped nullable → error.
 Example definition fragment:
 ```csharp
@@ -162,9 +162,9 @@ public class Range // Not recommended to extend Immutable for Ordered classes.
     [Order(1)] public readonly int Max;
 }
 ```
-CSV cell example: `Range:10;25` assigns `Min=10`, `Max=25`.
+CSV cell example: `Range:10|25` assigns `Min=10`, `Max=25`.
 
-Name can be omitted if field is specific type.
+Name can be omitted if field is specific type. A field of an abstract type (or interface) works when some `[Ordered]` type implements it; the cell must then name the concrete type.
 ```csharp
 abstract class Condition 
 {
@@ -193,7 +193,7 @@ class Foo : Immutable
 ```
 ```
 Class,Name,MyRange,Conditions
-Foo,Foo,0;100,"Above:100,Below:200"
+Foo,Foo,0|100,"Above:100,Below:200"
 ```
 
 ### 4.5 Lists, Arrays & Weighted Lists
@@ -203,7 +203,7 @@ The importer recognizes certain collection forms:
 | ------------ | -------------- |------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `T[]` (array) | `a,b,c` or bracketed `[a,b,c]` | Brackets optional; internal logic can parse both. Use brackets for nested arrays. `[[1,2,3],[1,2,3],[1,2,3]]` will deserialize into list of 3 lists. |
 | `ImmutableList<T>` | `[a,b,c]` or simple comma list | Empty string → `ImmutableList<T>.Empty`.                                                                                                             |
-| `WeightedList<T>` | `value:weight,value:weight,...` | Cannot be empty; weight parsed as `double`.                                                                                                          |
+| `WeightedList<T>` | `value|weight,value|weight,...` | Cannot be empty; weight parsed as `double`.                                                                                                          |
 
 Internally, brackets trigger a specialized block parser (`ParseArrays`) so nested list/array or composite types encoded inside a single cell can work. If multiple top-level arrays are found in one cell (e.g. `[...] [...]`) it's treated as malformed.
 
@@ -311,11 +311,11 @@ public class WeaponData : Immutable
 CSV (e.g., `WeaponData.csv`):
 ```
 Class,Name,Damage,Cooldown,Tags,SignatureBias
-WeaponData,WeaponLaser1,10,1.5,[TraitFast,TraitPrecise],SignatureStar:0.7,SignatureShip:0.3
+WeaponData,WeaponLaser1,10,1.5,[TraitFast,TraitPrecise],"SignatureStar|0.7,SignatureShip|0.3"
 ```
 Notes:
 - The tags list uses bracket form to avoid ambiguity if future parsing logic requires it (both `[TraitFast,TraitPrecise]` and `TraitFast,TraitPrecise` are accepted for `ImmutableList`).
-- Weighted list cell merges entries with commas; each entry `value:weight`.
+- Weighted list cell merges entries with commas; each entry `value|weight`.
 
 ## 10. Adding Custom Parsing Logic
 If you introduce a new serialized pattern or wrapper type:
@@ -349,13 +349,13 @@ public override bool Validate(Result r)
     return r.IsSuccess;
 }
 ```
-Fail fast: One error aborts import; add the most actionable one.
+Add every problem you find: the importer runs all validations and reports all errors together.
 
 ## 13. Troubleshooting
 | Symptom | Likely Cause | Fix |
 | ------- | ------------ | --- |
 | `No deserializer found for type` | Missing custom handler or unsupported wrapper type | Add/extend a deserializer. |
-| `RanOutOfResolveStepsException` | Circular or typo'd reference name; object never resolves | Check breadcrumbs + verify `Name` strings. |
+| `RanOutOfResolveStepsException` | Typo'd reference name; object never resolves | The message lists each unresolved value with `file:line` and column. |
 | `Malformed data` (array parsing) | Brackets mismatched or nested arrays incorrectly concatenated | Ensure each list cell has balanced `[]`. |
 | Empty list when expecting values | Forgotten brackets or typo caused fallback to empty string | Inspect raw CSV cell content (trailing spaces trimmed). |
 | Duplicate name conflict | Same `Name` across different CSVs | Rename one; `Name` is global key (not per-type). |
@@ -395,3 +395,41 @@ Set this before calling `Import`.
 - Provide built‑in parser for compound aggregate base patterns (e.g., produce dictionary automatically).
 - Extend `WeightedList<T>` deserialization to support bracketed groups and inline comments.
 - Add CSV schema linting pass to catch unused headers or unmatched class names early.
+
+## 21. Plain .NET build
+The `DotNet~` folder holds a plain .NET 8 build (`ImmutableData.csproj`) and its NUnit tests. The folder name ends in
+`~` so Unity ignores it when this repository sits inside a Unity project. `ImmutableJsonConverter.cs` needs
+Newtonsoft.Json and is left out of the plain build.
+
+```bash
+cd "DotNet~"
+dotnet test ImmutableData.sln
+```
+
+CSV is read by the library's own RFC 4180 reader (`ImmutableData.Csv.CsvReader`): commas, double-quoted fields with `""`
+escapes, quoted fields across lines, empty lines skipped.
+
+## 22. Rows, sources and errors
+`CsvRowReader.ReadFile(path)` turns a file into `ImmutableRow`s (cells by header plus `file:line`). A host can merge or
+filter rows before importing, for example to layer mods where a later row with the same `Class` and `Name` replaces an
+earlier one, and then call `ImmutableImporter.Import(rows)`. `Import(string[] files)` still works and does the same for
+plain files. Import errors name the file, line and column.
+
+## 23. Assets
+`AssetRef<T>` holds an asset name and type only. The host loads assets by setting `AssetRef.Resolver` (an
+`IAssetResolver`), then `assetRef.Get()` returns the asset or null.
+
+## 24. Recycle bin
+Rows are never just deleted or renamed, so saved games that name them still load. Retired rows go in recycle-bin files
+with the same columns plus:
+
+| Column | Meaning |
+|---|---|
+| `ReplacedBy` | The name of the row that takes over (a rename or merge). Lookups of the old name return the new row, also from active data. |
+| `RemovedIn` | The version the row was retired in. Stored on `Immutable.RemovedIn`. |
+
+Read them with `CsvRowReader.ReadFile(path, recycleBin: true)` and import them with the active rows. A recycled row
+without `ReplacedBy` loads as a **retired** immutable (`IsRetired`): `Get` and `TryGet` find it, but `GetAll` never
+returns it (`GetRetired` does). A retired row's references that no longer resolve keep their defaults and are listed in
+`ImmutableDatabase.Warnings`. Import fails when a name is both active and recycled, when a `ReplacedBy` points nowhere,
+or when `ReplacedBy` names loop.
