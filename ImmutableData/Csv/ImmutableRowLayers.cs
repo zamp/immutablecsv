@@ -79,6 +79,10 @@ namespace ImmutableData.Csv
 
 			foreach (var cell in patch.Cells)
 			{
+				// Empty cells are "not set here", so a wide patch file only changes the cells it fills in.
+				if (string.IsNullOrWhiteSpace(cell.Value))
+					continue;
+
 				var existing = cells.FindIndex(x => x.Key == cell.Key);
 
 				if (existing >= 0)

@@ -333,6 +333,10 @@ namespace ImmutableData
 
 		private static bool Resolve(UnresolvedModel model, Unresolved unresolved)
 		{
+			// An empty cell means "not set here": the member keeps the default its class gives it.
+			if (string.IsNullOrWhiteSpace(unresolved.Value))
+				return true;
+
 			try
 			{
 				if (unresolved is UnresolvedProperty unresolvedProperty)

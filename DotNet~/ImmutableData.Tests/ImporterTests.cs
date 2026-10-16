@@ -56,6 +56,15 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void EmptyCellsKeepTheClassDefault()
+		{
+			var db = Import(("Settings.csv", "Class,Name,Motto,Speed\nSettings,,,\n"));
+
+			Assert.That(db.Get<Settings>().Motto, Is.EqualTo("Keep calm"));
+			Assert.That(db.Get<Settings>().Speed, Is.EqualTo(1));
+		}
+
+		[Test]
 		public void ImportsOrderedTypesWeightedListsAndOperators()
 		{
 			var db = Import(

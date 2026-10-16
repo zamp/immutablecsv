@@ -36,6 +36,17 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void EmptyPatchCellsChangeNothing()
+		{
+			var db = Import(
+				("base/Fruits.csv", "Class,Name,Calories,Weight\nFruit,Apple,52,0.2\n"),
+				("mod/Fruits.csv", "Class,Name,Calories,Weight\nFruit,Apple,,0.4\n"));
+
+			Assert.That(db.Get<Fruit>("Apple").Calories, Is.EqualTo(52));
+			Assert.That(db.Get<Fruit>("Apple").Weight, Is.EqualTo(0.4f));
+		}
+
+		[Test]
 		public void PatchesStackInOrder()
 		{
 			var db = Import(

@@ -218,8 +218,9 @@ Form: `LIN(steps,min,max)`, `LOG(...)`, `EXP(...)`, `MUL(...)`:
 If this pattern matches, it overrides normal comma splitting.
 
 ### 4.7 Null / Empty Cells
-- Empty string deserializes to `null` for nullable / reference types.
-- Empty string for arrays / lists produces an empty collection (except `WeightedList<T>` which throws).
+- An empty cell leaves the member at the default its class gives it (`public readonly string Motto = "Keep calm";`
+  stays "Keep calm"). Members without a default stay `null` or zero.
+- Inside lists and ordered values, an empty item still deserializes to `null` for nullable / reference types.
 
 ## 5. Deserialization Pipeline
 The importer tries deserializers in the order defined by the given provider. Default is `BasicDeserializerProvider`:
@@ -418,7 +419,7 @@ plain files. Import errors name the file, line and column.
 ### Layering and patch rows
 `ImmutableRowLayers.Merge(layers)` combines rows from several sources in order, such as a base game and its mods. A
 later row naming an immutable that already exists (same name root type and `Name`) is a **patch**: it changes only the
-columns it has, and every other field keeps the earlier value. A mod can ship a small file:
+cells it fills in (empty cells change nothing), and every other field keeps the earlier value. A mod can ship a small file:
 
 ```
 Class,Name,Calories

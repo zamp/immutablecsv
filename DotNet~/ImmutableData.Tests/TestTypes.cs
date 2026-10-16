@@ -72,6 +72,7 @@ namespace ImmutableData.Tests
 
 	public class Settings : Immutable
 	{
+		public readonly string Motto = "Keep calm";
 		public readonly int Speed = 1;
 		public readonly string Title = "";
 		public readonly Fruit? Favourite = null;
