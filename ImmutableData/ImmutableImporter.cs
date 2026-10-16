@@ -245,7 +245,7 @@ namespace ImmutableData
 				foreach (var model in pending)
 				{
 					foreach (var unresolved in model.Unresolved)
-						error.AppendLine($"{model.Row.Location}: {model.Immutable}, column {unresolved.Header}: {Describe(unresolved)}");
+						error.AppendLine($"{model.Row.LocationOf(unresolved.Header)}: {model.Immutable}, column {unresolved.Header}: {Describe(unresolved)}");
 				}
 
 				throw new RanOutOfResolveStepsException(error.ToString().TrimEnd());
@@ -370,7 +370,7 @@ namespace ImmutableData
 			catch (Exception e) when (e is not ImmutableImportException)
 			{
 				var reason = e.InnerException != null ? $"{e.Message} ({e.InnerException.Message})" : e.Message;
-				throw new ImmutableImportException($"{model.Row.Location}: {model.Immutable.GetType().Name} '{model.Row.Name}', column {unresolved.Header} = '{unresolved.Value}': {reason}", e);
+				throw new ImmutableImportException($"{model.Row.LocationOf(unresolved.Header)}: {model.Immutable.GetType().Name} '{model.Row.Name}', column {unresolved.Header} = '{unresolved.Value}': {reason}", e);
 			}
 		}
 
@@ -497,7 +497,7 @@ namespace ImmutableData
 				}
 
 				if (!TryAddMember(unresolvedModel, type, header, header, cell.Value))
-					throw new ImmutableImportException($"{row.Location}: {type.Name} has no field or property '{header}'.");
+					throw new ImmutableImportException($"{row.LocationOf(header)}: {type.Name} has no field or property '{header}'.");
 			}
 
 			foreach (var kvp in compoundGroups)

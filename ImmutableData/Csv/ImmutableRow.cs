@@ -13,11 +13,12 @@ namespace ImmutableData.Csv
 		public const string ReplacedByHeader = "ReplacedBy";
 		public const string RemovedInHeader = "RemovedIn";
 
-		public ImmutableRow(string source, int line, IReadOnlyList<KeyValuePair<string, string>> cells, bool retired = false, string? replacedBy = null, string? removedIn = null)
+		public ImmutableRow(string source, int line, IReadOnlyList<KeyValuePair<string, string>> cells, bool retired = false, string? replacedBy = null, string? removedIn = null, IReadOnlyDictionary<string, string>? cellLocations = null)
 		{
 			Source = source;
 			Line = line;
 			Cells = cells;
+			CellLocations = cellLocations;
 			Retired = retired;
 			ReplacedBy = string.IsNullOrWhiteSpace(replacedBy) ? null : replacedBy!.Trim();
 			RemovedIn = string.IsNullOrWhiteSpace(removedIn) ? null : removedIn!.Trim();
@@ -41,12 +42,24 @@ namespace ImmutableData.Csv
 		/// <summary>For a recycled row, the version the row was retired in. Informational.</summary>
 		public string? RemovedIn { get; }
 
+		/// <summary>
+		/// For a row merged from patches: where each cell came from, as <c>file:line</c>. Cells not listed come from
+		/// <see cref="Location"/>.
+		/// </summary>
+		public IReadOnlyDictionary<string, string>? CellLocations { get; }
+
 		public string Class => GetCell(ImmutableImporter.ClassHeader) ?? "";
 
 		public string Name => GetCell(nameof(Immutable.Name)) ?? "";
 
 		/// <summary>Where the row came from, as <c>file:line</c>.</summary>
 		public string Location => $"{Source}:{Line}";
+
+		/// <summary>Where a cell came from: its patch row, or this row.</summary>
+		public string LocationOf(string header)
+		{
+			return CellLocations != null && CellLocations.TryGetValue(header, out var location) ? location : Location;
+		}
 
 		public string? GetCell(string header)
 		{
@@ -61,7 +74,7 @@ namespace ImmutableData.Csv
 
 		public ImmutableRow WithCells(IReadOnlyList<KeyValuePair<string, string>> cells)
 		{
-			return new ImmutableRow(Source, Line, cells, Retired, ReplacedBy, RemovedIn);
+			return new ImmutableRow(Source, Line, cells, Retired, ReplacedBy, RemovedIn, CellLocations);
 		}
 	}
 }

@@ -415,6 +415,20 @@ filter rows before importing, for example to layer mods where a later row with t
 earlier one, and then call `ImmutableImporter.Import(rows)`. `Import(string[] files)` still works and does the same for
 plain files. Import errors name the file, line and column.
 
+### Layering and patch rows
+`ImmutableRowLayers.Merge(layers)` combines rows from several sources in order, such as a base game and its mods. A
+later row naming an immutable that already exists (same name root type and `Name`) is a **patch**: it changes only the
+columns it has, and every other field keeps the earlier value. A mod can ship a small file:
+
+```
+Class,Name,Calories
+Fruit,Apple,60
+```
+
+Patches stack in layer order and work on `Key,Value` config files too. A row with a `Remove` column set to `true`
+deletes the earlier row; any other row adds a new immutable. Within one layer a repeated name is still a conflict.
+Errors in a patched cell name the patch file and line.
+
 ## 23. Assets
 `AssetRef<T>` holds an asset name and type only. The host loads assets by setting `AssetRef.Resolver` (an
 `IAssetResolver`), then `assetRef.Get()` returns the asset or null.
