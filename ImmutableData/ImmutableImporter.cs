@@ -83,6 +83,13 @@ namespace ImmutableData
 		}
 
 		public static readonly List<string> Breadcrumbs = new();
+
+		/// <summary>
+		/// The importer keeps its settings and progress in static fields. Imports and single-value deserializing take
+		/// this lock, so hosts that import from several threads (parallel tests) stay safe; hosts that change
+		/// <see cref="AssemblyProvider"/> or <see cref="DeserializerProvider"/> should hold it while they do.
+		/// </summary>
+		public static readonly object SyncRoot = new();
 		private static readonly List<IImmutableDeserializer> Deserializers = new();
 
 		/// <summary>Imports CSV files. Every file is active data; use <see cref="Import(IEnumerable{ImmutableRow})"/> for recycle bins.</summary>
@@ -104,6 +111,12 @@ namespace ImmutableData
 		/// load as retired immutables, or as renames when they have a <see cref="ImmutableRow.ReplacedBy"/>.
 		/// </summary>
 		public static ImmutableDatabase Import(IEnumerable<ImmutableRow> rows)
+		{
+			lock (SyncRoot)
+				return ImportLocked(rows);
+		}
+
+		private static ImmutableDatabase ImportLocked(IEnumerable<ImmutableRow> rows)
 		{
 			Breadcrumbs.Clear();
 			Deserializers.Clear();
@@ -165,6 +178,12 @@ namespace ImmutableData
 		}
 
 		public static object Deserialize(Type type, string data, ImmutableDatabase database)
+		{
+			lock (SyncRoot)
+				return DeserializeLocked(type, data, database);
+		}
+
+		private static object DeserializeLocked(Type type, string data, ImmutableDatabase database)
 		{
 			Deserializers.Clear();
 			foreach (var provider in DeserializerProvider.Providers)
