@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
 namespace ImmutableData
@@ -64,7 +65,9 @@ namespace ImmutableData
 
 		internal void AddWarning(string warning)
 		{
-			_warnings.Add(warning);
+			// a cell read again on a later pass warns once
+			if (!_warnings.Contains(warning))
+				_warnings.Add(warning);
 		}
 
 		/// <summary>
@@ -119,6 +122,19 @@ namespace ImmutableData
 			}
 
 			immutable = null;
+			return false;
+		}
+
+		/// <summary>
+		/// Gets an active immutable by name for new use, such as a name a script asks for: follows recycle-bin renames
+		/// but never returns a retired immutable, which is kept only for old saves.
+		/// </summary>
+		public bool TryGetActive<T>(string name, [NotNullWhen(true)] out T? data) where T : Immutable
+		{
+			if (TryGet(name, out data) && !data!.IsRetired)
+				return true;
+
+			data = null;
 			return false;
 		}
 

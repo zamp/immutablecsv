@@ -46,6 +46,7 @@ namespace ImmutableData.Tests
 			var db = Import("Class,Name,Pairing\nFruit,GreenApple,\nFruit,Pear,Apple\n", "Class,Name,ReplacedBy\nFruit,Apple,GreenApple\n");
 
 			Assert.That(db.Get<Fruit>("Pear").Pairing!.Name, Is.EqualTo("GreenApple"));
+			Assert.That(db.Warnings.Single(), Does.Contain("data/Fruits.csv:3").And.Contain("renamed to 'GreenApple'"));
 		}
 
 		[Test]
@@ -77,6 +78,42 @@ namespace ImmutableData.Tests
 			var error = Assert.Throws<ImmutableImporter.ImmutableValidationException>(() => Import("Class,Name\nFruit,Apple\n", "Class,Name\nFruit,Apple\n"))!;
 
 			Assert.That(error.Message, Does.Contain("both active and in the recycle bin"));
+		}
+
+		[Test]
+		public void ActiveRowNamingARetiredRowFails()
+		{
+			var error = Assert.Throws<ImmutableImportException>(() => Import("Class,Name,Pairing\nFruit,Apple,\nFruit,Pear,Durian\n", "Class,Name\nFruit,Durian\n"))!;
+
+			Assert.That(error.Message, Does.Contain("data/Fruits.csv:3"));
+			Assert.That(error.Message, Does.Contain("column Pairing"));
+			Assert.That(error.Message, Does.Contain("names the retired Fruit 'Durian'"));
+		}
+
+		[Test]
+		public void ActiveListNamingARenamedRetiredRowFails()
+		{
+			var error = Assert.Throws<ImmutableImportException>(() => Import("Class,Name,Related\nFruit,Pear,\"Pear,Jackfruit\"\n", "Class,Name,ReplacedBy\nFruit,Durian,\nFruit,Jackfruit,Durian\n"))!;
+
+			Assert.That(error.Message, Does.Contain("names the retired Fruit 'Durian'"));
+		}
+
+		[Test]
+		public void RetiredRowsMayNameRetiredRows()
+		{
+			var db = Import("Class,Name\nFruit,Apple\n", "Class,Name,Pairing\nFruit,Durian,Jackfruit\nFruit,Jackfruit,\n");
+
+			Assert.That(db.Get<Fruit>("Durian").Pairing, Is.SameAs(db.Get<Fruit>("Jackfruit")));
+		}
+
+		[Test]
+		public void TryGetActiveFollowsRenamesButSkipsRetiredRows()
+		{
+			var db = Import("Class,Name\nFruit,GreenApple\n", "Class,Name,ReplacedBy\nFruit,Apple,GreenApple\nFruit,Durian,\n");
+
+			Assert.That(db.TryGetActive<Fruit>("Apple", out var apple) ? apple!.Name : null, Is.EqualTo("GreenApple"));
+			Assert.That(db.TryGetActive<Fruit>("Durian", out _), Is.False);
+			Assert.That(db.TryGet<Fruit>("Durian", out _), Is.True);
 		}
 
 		[Test]

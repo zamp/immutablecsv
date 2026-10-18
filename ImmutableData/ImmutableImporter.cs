@@ -359,6 +359,9 @@ namespace ImmutableData
 			if (string.IsNullOrWhiteSpace(unresolved.Value))
 				return true;
 
+			// only retired rows may name retired rows
+			ImmutableDeserializer.ActiveCell = model.Immutable.IsRetired ? null : model.Row.LocationOf(unresolved.Header);
+
 			try
 			{
 				if (unresolved is UnresolvedProperty unresolvedProperty)
@@ -397,6 +400,10 @@ namespace ImmutableData
 			{
 				var reason = e.InnerException != null ? $"{e.Message} ({e.InnerException.Message})" : e.Message;
 				throw new ImmutableImportException($"{model.Row.LocationOf(unresolved.Header)}: {model.Immutable.GetType().Name} '{model.Row.Name}', column {unresolved.Header} = '{unresolved.Value}': {reason}", e);
+			}
+			finally
+			{
+				ImmutableDeserializer.ActiveCell = null;
 			}
 		}
 

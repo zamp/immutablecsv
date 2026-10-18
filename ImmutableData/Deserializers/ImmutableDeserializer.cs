@@ -3,38 +3,47 @@ using System.Linq;
 
 namespace ImmutableData.Deserializers
 {
-    public class ImmutableDeserializer : IImmutableDeserializer
-    {
-        public static ImmutableDatabase ImmutableDatabase;
-        
-        public bool CanDeserialize(Type type)
-        {
-	        return typeof(Immutable).IsAssignableFrom(type)
-	               || type.IsDefined(typeof(ImmutableReferenceAttribute), true);
-        }
+	public class ImmutableDeserializer : IImmutableDeserializer
+	{
+		public static ImmutableDatabase ImmutableDatabase;
 
-        public bool Deserialize(Type type, string data, out object deserializedObject)
-        {
-	        if (ImmutableDatabase.Exists(type, data))
-	        {
-		        deserializedObject = ImmutableDatabase.Get(type, data);
-		        return true;
-	        }
+		/// <summary>
+		/// Where the active row's cell being read is, while the importer reads one; null otherwise. Active data may not
+		/// name a retired immutable, which is kept only for old saves and other retired rows, and is warned when it names
+		/// one by a name the recycle bin renamed.
+		/// </summary>
+		public static string ActiveCell;
 
-	        if (type.IsDefined(typeof(ImmutableReferenceAttribute), true))
-	        {
-		        var matches = ImmutableDatabase.GetAll<Immutable>()
-		        	.Where(x => x.Name == data && type.IsInstanceOfType(x))
-		        	.Take(2)
-		        	.ToArray();
+		public bool CanDeserialize(Type type)
+		{
+			return typeof(Immutable).IsAssignableFrom(type) || type.IsDefined(typeof(ImmutableReferenceAttribute), true);
+		}
 
-		        deserializedObject = matches.Length == 1 ? matches[0] : null;
-		        return matches.Length == 1;
-	        }
+		public bool Deserialize(Type type, string data, out object deserializedObject)
+		{
+			if (ImmutableDatabase.TryGet(type, data, out var found))
+			{
+				if (ActiveCell != null && found.IsRetired)
+					throw new InvalidOperationException($"names the retired {ImmutableDatabase.GetRootBaseType(found.GetType()).Name} '{found.Name}', which is kept only for old saves; name an active one instead");
 
-            ImmutableImporter.AddBreadcrumb("Immutable " + type.Name + " not found with data: " + data);
-            deserializedObject = null;
-            return false;
-        }
-    }
+				if (ActiveCell != null && found.Name != data.Trim())
+					ImmutableDatabase.AddWarning($"{ActiveCell}: names '{data.Trim()}', which the recycle bin renamed to '{found.Name}'; name '{found.Name}' instead.");
+
+				deserializedObject = found;
+				return true;
+			}
+
+			if (type.IsDefined(typeof(ImmutableReferenceAttribute), true))
+			{
+				var matches = ImmutableDatabase.GetAll<Immutable>().Where(x => x.Name == data && type.IsInstanceOfType(x)).Take(2).ToArray();
+
+				deserializedObject = matches.Length == 1 ? matches[0] : null;
+				return matches.Length == 1;
+			}
+
+			ImmutableImporter.AddBreadcrumb("Immutable " + type.Name + " not found with data: " + data);
+			deserializedObject = null;
+			return false;
+		}
+	}
 }
