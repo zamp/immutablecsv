@@ -91,6 +91,38 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void PatchOfARenamedRowChangesItsReplacement()
+		{
+			var warnings = new List<string>();
+			var recycled = CsvRowReader.ReadText("Class,Name,ReplacedBy\nFruit,Apple,GreenApple\n", "base/recycle/Fruits.csv", recycleBin: true);
+			var rows = ImmutableRowLayers.Merge(new[]
+			{
+				CsvRowReader.ReadText("Class,Name,Calories,Weight\nFruit,GreenApple,52,0.2\n", "base/Fruits.csv"),
+				CsvRowReader.ReadText("Class,Name,Calories\nFruit,Apple,60\n", "mod/Fruits.csv")
+			}, warnings, recycled);
+
+			var db = ImmutableImporter.Import(rows.Concat(recycled));
+
+			Assert.That(db.GetAll<Fruit>().Single().Name, Is.EqualTo("GreenApple"));
+			Assert.That(db.Get<Fruit>("GreenApple").Calories, Is.EqualTo(60));
+			Assert.That(db.Get<Fruit>("GreenApple").Weight, Is.EqualTo(0.2f));
+			Assert.That(warnings.Single(), Does.Contain("mod/Fruits.csv:2").And.Contain("renamed to 'GreenApple'"));
+		}
+
+		[Test]
+		public void RemoveOfARenamedRowRemovesItsReplacement()
+		{
+			var recycled = CsvRowReader.ReadText("Class,Name,ReplacedBy\nFruit,Apple,GreenApple\n", "base/recycle/Fruits.csv", recycleBin: true);
+			var rows = ImmutableRowLayers.Merge(new[]
+			{
+				CsvRowReader.ReadText("Class,Name\nFruit,GreenApple\nFruit,Pear\n", "base/Fruits.csv"),
+				CsvRowReader.ReadText("Class,Name,Remove\nFruit,Apple,true\n", "mod/Fruits.csv")
+			}, new List<string>(), recycled);
+
+			Assert.That(rows.Select(x => x.Name), Is.EqualTo(new[] { "Pear" }));
+		}
+
+		[Test]
 		public void DuplicatesWithinOneLayerStillConflict()
 		{
 			Assert.Throws<ImmutableImportException>(() => Import(("base/Fruits.csv", "Class,Name\nFruit,Apple\nFruit,Apple\n")));
