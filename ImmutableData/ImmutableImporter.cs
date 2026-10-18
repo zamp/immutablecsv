@@ -185,6 +185,9 @@ namespace ImmutableData
 
 		private static object DeserializeLocked(Type type, string data, ImmutableDatabase database)
 		{
+			if (string.IsNullOrWhiteSpace(data) && type.IsValueType && Nullable.GetUnderlyingType(type) == null)
+				throw new ImmutableImportException($"'' could not be read as {FriendlyName(type)}: the value is empty.");
+
 			Deserializers.Clear();
 			foreach (var provider in DeserializerProvider.Providers)
 				Deserializers.AddRange(provider.Deserializers);

@@ -135,6 +135,8 @@ namespace ImmutableData.Tests
 			var related = ImmutableImporter.Deserialize<System.Collections.Immutable.ImmutableList<Fruit>>("Apple", db);
 			Assert.That(related.Single(), Is.SameAs(db.Get<Fruit>("Apple")));
 			Assert.Throws<ImmutableImportException>(() => ImmutableImporter.Deserialize<Fruit>("Nope", db));
+			Assert.Throws<ImmutableImportException>(() => ImmutableImporter.Deserialize<int>("", db));
+			Assert.That(ImmutableImporter.Deserialize<int?>("", db), Is.Null);
 		}
 
 		[Test]
