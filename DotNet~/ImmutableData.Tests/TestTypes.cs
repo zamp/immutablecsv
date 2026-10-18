@@ -49,7 +49,7 @@ namespace ImmutableData.Tests
 	public class AtLeast : Check
 	{
 		[Order(0)] public readonly string Stat = "";
-		[Order(1)] public readonly Comparison Operator = Comparison.Equal;
+		[Order(1)] public readonly Comparison Operator = Comparison.GreaterOrEqual;
 		[Order(2)] public readonly int Value = 0;
 	}
 

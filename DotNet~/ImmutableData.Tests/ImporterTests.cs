@@ -77,6 +77,16 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void EmptyPartOfAnOrderedValueKeepsTheDefault()
+		{
+			var db = Import(("Baskets.csv", "Class,Name,Checks\nBasket,B,\"AtLeast:Sweetness||5\"\n"));
+
+			var check = (AtLeast)db.Get<Basket>("B").Checks[0];
+			Assert.That(check.Operator, Is.EqualTo(Comparison.GreaterOrEqual));
+			Assert.That(check.Value, Is.EqualTo(5));
+		}
+
+		[Test]
 		public void EmptyCellsKeepTheClassDefault()
 		{
 			var db = Import(("Settings.csv", "Class,Name,Motto,Speed\nSettings,,,\n"));

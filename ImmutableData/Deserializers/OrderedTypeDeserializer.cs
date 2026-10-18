@@ -163,6 +163,13 @@ namespace ImmutableData.Deserializers
                 
                 var propertyData = splitData[j];
 
+                // an empty part keeps the class default, as an empty cell does
+                if (string.IsNullOrWhiteSpace(propertyData))
+                {
+                    j++;
+                    continue;
+                }
+
                 if (nullableType == null)
                 {
                     if (ImmutableImporter.TryDeserialize(propertyType, propertyData, out var obj))
@@ -219,6 +226,13 @@ namespace ImmutableData.Deserializers
                 }
                 
                 var propertyData = splitData[j];
+
+                // an empty part keeps the class default, as an empty cell does
+                if (string.IsNullOrWhiteSpace(propertyData))
+                {
+                    j++;
+                    continue;
+                }
 
                 if (nullableType == null)
                 {
