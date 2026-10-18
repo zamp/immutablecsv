@@ -88,6 +88,11 @@ namespace ImmutableData.Tests
 	{
 	}
 
+	public class Bowl : Immutable
+	{
+		public readonly Fruit Holds = null!;
+	}
+
 	public class Settings : Immutable
 	{
 		public readonly string Motto = "Keep calm";

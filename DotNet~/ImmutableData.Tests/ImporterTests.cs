@@ -103,6 +103,14 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void BlankRequiredReferenceFails()
+		{
+			var error = Assert.Throws<ImmutableImporter.ImmutableValidationException>(() => Import(("Bowls.csv", "Class,Name,Holds\nBowl,Empty,\n")))!;
+
+			Assert.That(error.Message, Does.Contain("Bowl:Empty: Holds is required."));
+		}
+
+		[Test]
 		public void EmptyCellsKeepTheClassDefault()
 		{
 			var db = Import(("Settings.csv", "Class,Name,Motto,Speed\nSettings,,,\n"));
