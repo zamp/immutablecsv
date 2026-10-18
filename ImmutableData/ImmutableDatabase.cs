@@ -31,20 +31,13 @@ namespace ImmutableData
 			return $"{type.Name}/{name}";
 		}
 
-		/// <summary>The type whose name namespaces <paramref name="type"/>'s names: the class just below <see cref="Immutable"/>.</summary>
+		/// <summary>The type whose name namespaces <paramref name="type"/>'s names: the class just below <see cref="Immutable"/>, or just below the nearest ancestor marked <see cref="NotImmutableRoot"/>.</summary>
 		public static Type GetRootBaseType(Type type)
 		{
 			var current = type;
 
-			while (current.BaseType != null && current.BaseType != typeof(object) && current.BaseType != typeof(Immutable))
+			while (current.BaseType != null && current.BaseType != typeof(object) && current.BaseType != typeof(Immutable) && !current.BaseType.IsDefined(typeof(NotImmutableRoot), false))
 				current = current.BaseType;
-
-			// If the resolved root is marked with [NotImmutableRoot], skip past it
-			// and use the original concrete type as the root instead.
-			if (current.IsDefined(typeof(NotImmutableRoot), false))
-			{
-				current = type;
-			}
 
 			return current;
 		}

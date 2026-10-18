@@ -66,6 +66,17 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void SubclassOfAClassBelowANotImmutableRootSharesItsNames()
+		{
+			var db = Import(("Tools.csv", "Class,Name\nHammer,Claw\n"));
+
+			Assert.That(ImmutableDatabase.GetRootBaseType(typeof(Hammer)), Is.EqualTo(typeof(Tool)));
+			Assert.That(db.TryGet<Tool>("Claw", out var tool), Is.True);
+			Assert.That(tool, Is.InstanceOf<Hammer>());
+			Assert.Throws<ImmutableImportException>(() => Import(("Tools.csv", "Class,Name\nTool,Claw\nHammer,Claw\n")));
+		}
+
+		[Test]
 		public void EmptyCellsKeepTheClassDefault()
 		{
 			var db = Import(("Settings.csv", "Class,Name,Motto,Speed\nSettings,,,\n"));

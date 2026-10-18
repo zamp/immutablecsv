@@ -70,6 +70,19 @@ namespace ImmutableData.Tests
 		public readonly ImmutableList<Scored> Scores = ImmutableList<Scored>.Empty;
 	}
 
+	[NotImmutableRoot]
+	public abstract class Labeled : Immutable
+	{
+	}
+
+	public class Tool : Labeled
+	{
+	}
+
+	public class Hammer : Tool
+	{
+	}
+
 	public class Settings : Immutable
 	{
 		public readonly string Motto = "Keep calm";
