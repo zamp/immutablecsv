@@ -87,6 +87,22 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void OrderedValueMissingARequiredReferenceFails()
+		{
+			var error = Assert.Throws<ImmutableImporter.ImmutableValidationException>(() => Import(("Rules.csv", "Class,Name,Scores\nRule,R,\"[Always]|5,Scored\"\n")))!;
+
+			Assert.That(error.Message, Does.Contain("Rule:R").And.Contain("Scores[1] Scored: Check is required."));
+		}
+
+		[Test]
+		public void ValidatableOrderedValueChecksItself()
+		{
+			var error = Assert.Throws<ImmutableImporter.ImmutableValidationException>(() => Import(("Baskets.csv", "Class,Name,Checks\nBasket,B,\"AtLeast:|>=|5\"\n")))!;
+
+			Assert.That(error.Message, Does.Contain("Checks[0] AtLeast: Stat is empty."));
+		}
+
+		[Test]
 		public void EmptyCellsKeepTheClassDefault()
 		{
 			var db = Import(("Settings.csv", "Class,Name,Motto,Speed\nSettings,,,\n"));

@@ -174,13 +174,14 @@ namespace ImmutableData
 			return _retired.Values.OfType<T>();
 		}
 
-		/// <summary>Validates every active immutable and collects all errors, each prefixed with the immutable.</summary>
+		/// <summary>Validates every active immutable and the [Ordered] values in it, and collects all errors, each prefixed with the immutable.</summary>
 		public bool Validate(Result result)
 		{
 			foreach (var immutable in _database.Values)
 			{
 				var before = result.Errors.Count;
 				immutable.Validate(result);
+				OrderedValues.Validate(immutable, result);
 				result.PrefixErrors(before, $"{immutable}: ");
 			}
 

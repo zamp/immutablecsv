@@ -46,11 +46,16 @@ namespace ImmutableData.Tests
 	}
 
 	[Ordered]
-	public class AtLeast : Check
+	public class AtLeast : Check, IValidatable
 	{
 		[Order(0)] public readonly string Stat = "";
 		[Order(1)] public readonly Comparison Operator = Comparison.GreaterOrEqual;
 		[Order(2)] public readonly int Value = 0;
+
+		public bool Validate(Result result)
+		{
+			return !result.ErrorOnTrue(Stat.Length == 0, "Stat is empty.");
+		}
 	}
 
 	[Ordered]
