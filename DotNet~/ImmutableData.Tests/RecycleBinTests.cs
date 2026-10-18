@@ -107,6 +107,23 @@ namespace ImmutableData.Tests
 		}
 
 		[Test]
+		public void LookingANameUpAllocatesNothing()
+		{
+			var db = Import("Class,Name,Calories\nFruit,GreenApple,52\n", "Class,Name,ReplacedBy,RemovedIn\nFruit,Apple,GreenApple,0.2.0\n");
+			db.TryGetActive<Fruit>("GreenApple", out _);
+
+			var before = System.GC.GetAllocatedBytesForCurrentThread();
+			for (var i = 0; i < 100; ++i)
+			{
+				db.TryGetActive<Fruit>("GreenApple", out _);
+				db.TryGet<Fruit>("Apple", out _);
+				db.TryGet<Fruit>("Durian", out _);
+			}
+
+			Assert.That(System.GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
+		}
+
+		[Test]
 		public void TryGetActiveFollowsRenamesButSkipsRetiredRows()
 		{
 			var db = Import("Class,Name\nFruit,GreenApple\n", "Class,Name,ReplacedBy\nFruit,Apple,GreenApple\nFruit,Durian,\n");

@@ -11,9 +11,9 @@ namespace ImmutableData
 	{
 		private const int MaxAliasDepth = 64;
 
-		private readonly Dictionary<string, Immutable> _database = new();
-		private readonly Dictionary<string, Immutable> _retired = new();
-		private readonly Dictionary<string, string> _aliases = new();
+		private readonly Dictionary<Key, Immutable> _database = new();
+		private readonly Dictionary<Key, Immutable> _retired = new();
+		private readonly Dictionary<Key, string> _aliases = new();
 		private readonly List<string> _warnings = new();
 
 		/// <summary>Non-fatal import notes, such as retired references that were dropped.</summary>
@@ -24,12 +24,48 @@ namespace ImmutableData
 
 		internal static string GetIdentifier(Type type, string? name)
 		{
+			return GetKey(type, name).ToString();
+		}
+
+		// a name under its root type; a struct, so looking a name up builds no string
+		private static Key GetKey(Type type, string? name)
+		{
 			if (type == null)
 				throw new ArgumentNullException(nameof(type));
 
-			type = GetRootBaseType(type);
+			return new Key(GetRootBaseType(type), name ?? string.Empty);
+		}
 
-			return $"{type.Name}/{name}";
+		private readonly struct Key : IEquatable<Key>
+		{
+			public readonly Type Root;
+			public readonly string Name;
+
+			public Key(Type root, string name)
+			{
+				Root = root;
+				Name = name;
+			}
+
+			public bool Equals(Key other)
+			{
+				return Root == other.Root && string.Equals(Name, other.Name, StringComparison.Ordinal);
+			}
+
+			public override bool Equals(object? obj)
+			{
+				return obj is Key other && Equals(other);
+			}
+
+			public override int GetHashCode()
+			{
+				return HashCode.Combine(Root, Name);
+			}
+
+			public override string ToString()
+			{
+				return $"{Root.Name}/{Name}";
+			}
 		}
 
 		/// <summary>The type whose name namespaces <paramref name="type"/>'s names: the class just below <see cref="Immutable"/>, or just below the nearest ancestor marked <see cref="NotImmutableRoot"/>.</summary>
@@ -48,7 +84,7 @@ namespace ImmutableData
 		/// </summary>
 		internal void Add<T>(T immutable) where T : Immutable
 		{
-			var key = GetIdentifier(immutable.GetType(), immutable.Name);
+			var key = GetKey(immutable.GetType(), immutable.Name);
 			var target = immutable.IsRetired ? _retired : _database;
 
 			if (!target.TryAdd(key, immutable))
@@ -57,7 +93,7 @@ namespace ImmutableData
 
 		internal void AddAlias(Type type, string oldName, string newName)
 		{
-			var key = GetIdentifier(type, oldName);
+			var key = GetKey(type, oldName);
 
 			if (!_aliases.TryAdd(key, newName))
 				throw new Exception($"{type.Name} {oldName} is replaced twice in the recycle bin.");
@@ -107,7 +143,7 @@ namespace ImmutableData
 
 			for (var depth = 0; depth < MaxAliasDepth; ++depth)
 			{
-				var key = GetIdentifier(type, current);
+				var key = GetKey(type, current);
 
 				if (_database.TryGetValue(key, out immutable) && type.IsInstanceOfType(immutable))
 					return true;
@@ -157,7 +193,7 @@ namespace ImmutableData
 		/// <summary>True when the name is an active immutable (not retired, not a rename).</summary>
 		public bool IsActive(Type type, string name)
 		{
-			return _database.TryGetValue(GetIdentifier(type, name), out var immutable) && type.IsInstanceOfType(immutable);
+			return _database.TryGetValue(GetKey(type, name), out var immutable) && type.IsInstanceOfType(immutable);
 		}
 
 		/// <summary>
@@ -202,13 +238,12 @@ namespace ImmutableData
 				if (_database.ContainsKey(alias.Key) || _retired.ContainsKey(alias.Key))
 					result.AddError($"{alias.Key} is replaced by {alias.Value} in the recycle bin but still exists.");
 
-				var typeName = alias.Key.Substring(0, alias.Key.IndexOf('/'));
-				var visited = new HashSet<string> { alias.Key };
+				var visited = new HashSet<Key> { alias.Key };
 				var current = alias.Value;
 
 				while (true)
 				{
-					var key = $"{typeName}/{current}";
+					var key = new Key(alias.Key.Root, current);
 
 					if (_database.ContainsKey(key) || _retired.ContainsKey(key))
 						break;
