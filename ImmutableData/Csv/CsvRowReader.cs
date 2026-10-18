@@ -64,6 +64,9 @@ namespace ImmutableData.Csv
 					if (string.IsNullOrEmpty(key))
 						throw new InvalidDataException($"{source}:{reader.RowLine}: empty key.");
 
+					if (row.Count > 2)
+						throw new InvalidDataException($"{source}:{reader.RowLine}: a Key,Value row has {row.Count} cells; quote the value if it contains commas.");
+
 					if (!keys.Add(key))
 						throw new InvalidDataException($"{source}:{reader.RowLine}: key '{key}' appears twice.");
 

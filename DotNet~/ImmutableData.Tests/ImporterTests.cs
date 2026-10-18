@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using ImmutableData.Csv;
@@ -53,6 +54,15 @@ namespace ImmutableData.Tests
 			Assert.That(settings.Speed, Is.EqualTo(3));
 			Assert.That(settings.Title, Is.EqualTo("Hello, world"));
 			Assert.That(settings.Favourite!.Name, Is.EqualTo("Apple"));
+		}
+
+		[Test]
+		public void KeyValueRowWithExtraCellsFails()
+		{
+			var error = Assert.Throws<InvalidDataException>(() => Import(("Settings.csv", "Key,Value\nClass,Settings\nSpeed,7,99\n")))!;
+
+			Assert.That(error.Message, Does.Contain("Settings.csv:3"));
+			Assert.That(error.Message, Does.Contain("quote the value"));
 		}
 
 		[Test]
