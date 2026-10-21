@@ -1,4 +1,4 @@
-# immutablecsv Plugin Documentation
+# immutablecsv
 
 ## 1. Purpose & High‑Level Overview
 `immutablecsv` is a lightweight, reflection‑driven data import system for Unity and plain .NET (no engine dependencies) that turns a set of CSV data files into a runtime, in‑memory `ImmutableDatabase` of strongly typed immutable model objects.
